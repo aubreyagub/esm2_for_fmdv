@@ -2,3 +2,5 @@
 */.ipynb_checkpoints/*
 .tar
 esm_data/
+__pycache__/
+*.pyc
