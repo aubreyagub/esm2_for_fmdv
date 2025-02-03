@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from protein_sequence import ProteinSequence
+from model_singleton import ModelSingleton
 import numpy as np
 
 class MutationStrategy(ABC):
     @abstractmethod
-    def __init__(self,alphabet):
-        self.alphabet = alphabet
+    def __init__(self):
+        self.alphabet = ModelSingleton().get_alphabet()
         self.start_pos = 138
         self.end_pos = 143
         self.token_offset=4 # index of aa in alphabet begins at 4
@@ -43,8 +44,8 @@ class MutationStrategy(ABC):
         
 # Mutate through substitution the position with the minimum logit 
 class MinLogitPosSub(MutationStrategy):
-    def __init__(self,alphabet):
-        super().__init__(alphabet)
+    def __init__(self):
+        super().__init__()
 
     def get_next_mutation(self,current_seq,all_logits,current_seq_logits,start_pos=138,end_pos=143):
         poss_of_interest_current_seq_logits = current_seq_logits[self.start_pos:self.end_pos+1]
@@ -60,9 +61,10 @@ class MinLogitPosSub(MutationStrategy):
         
         return min_logit_pos,aa_char
 
+# Use logic of MinLogitPosSub, weighted/penalty using blosum scores
 class BlosumWeightedSub(MutationStrategy):
-    def __init__(self,alphabet,blosum_matrix,multiplier=None):
-        super().__init__(alphabet)
+    def __init__(self,blosum_matrix,multiplier=None):
+        super().__init__()
         self.blosum_matrix = blosum_matrix
         self.multiplier = multiplier
 
