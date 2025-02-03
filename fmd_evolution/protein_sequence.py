@@ -1,81 +1,81 @@
 import torch
+from model_singleton import ModelSingleton
 
 class ProteinSequence:
-    def __init__(self,id,reference_seq):
+    def __init__(self,id,sequence,parent_seq=None,mutation=None):
         self.id = id
-        self.reference_seq = reference_seq
-        self.current_seq = reference_seq
-        # self.current_batch_tokens = []
-        # self.current_all_logits = []
-        # self.current_seq_logits = []
-        self.mutations = []
-
-    def set_current_seq(self,new_seq):
-        self.current_seq = new_seq
-
-    # def set_current_batch_tokens(self,current_batch_tokens):
-    #     self.current_batch_tokens = current_batch_tokens
-
-    # def set_current_all_logits(self,current_all_logits)
-    #     self.current_all_logits = current_all_logits
-
-    # def set_current_seq_logits(self, current_seq_logits):
-    #     self.current_seq_logits = current_seq_logits
+        self.parent_seq = parent_seq # previous seq
+        self.left_seq = None # child seq with lower score
+        self.right_seq = None # child seq with higher score
+        # esm data
+        self.model = ModelSingleton().get_model()
+        self.alphabet = ModelSingleton().get_alphabet()
+        self.batch_converter = ModelSingleton().get_batch_converter()
+        # sequence data
+        self.sequence = sequence
+        self.mutation = mutation # to be set using a MutationStrategy 
+        self.mutation_score = None # to be set using an EvaluationStrategy
+        # plm processed data
+        self.batch_tokens = None
+        self.set_batch_tokens()
+        self.all_logits = None
+        self.set_all_logits()
+        self.sequence_only_logits = None
+        self.set_sequence_only_logits()
+        self.embeddings = None
+        self.set_embeddings()
     
-    def get_reference_seq(self):
-        return self.reference_seq
-
-    def get_current_seq(self):
-        return self.current_seq
-
-    # def get_current_batch_tokens(self):
-    #     return self.current_batch_tokens 
-
-    # def get_current_all_logits(self)
-    #     return self.current_all_logits 
-
-    # def get_current_seq_logits(self):
-    #     return self.current_seq_logits 
+    def set_parent_seq(self,seq):
+        self.parent_seq = seq
         
-    def get_mutations(self):
-        return self.mutations
-
-    def add_mutation(self, mutation):
-        self.mutations.append(mutation)
-
-    def get_batch_tokens(self,model,alphabet,batch_converter):
-        data = [(self.id,self.current_seq)]
-        batch_labels, batch_strs, batch_tokens = batch_converter(data)
-        return batch_tokens
-         
-    def get_all_logits(self,batch_tokens,model,start_pos=138, end_pos=143):
-        if torch.cuda.is_available():
-            batch_tokens = batch_tokens.to(device=device, non_blocking=True)
-        with torch.no_grad():
-            logits_raw = model(batch_tokens)["logits"].squeeze(0)
-            aa_tokens_len = len(batch_tokens[0,1:-1]) # without start and stop tokens
-            logits_target = logits_raw [1:(aa_tokens_len+1),4:24]
+    def set_left_seq(self,seq):
+        self.left_seq = seq
     
+    def set_right_seq(self,seq):
+        self.right_seq = seq
+
+    def set_mutation(self,mutation): # chosen and set by a MutationStrategy
+        self.mutation = mutation
+    
+    def set_mutation_score(self,score): # chosen and set by an EvaluationStrategy
+        self.mutation_score = score
+
+    def set_batch_tokens(self):
+        data = [(self.id,self.sequence)]
+        batch_labels, batch_strs, batch_tokens = self.batch_converter(data)
+        self.batch_tokens = batch_tokens
+
+    def set_all_logits(self):
+        with torch.no_grad():
+            logits_raw = self.model(self.batch_tokens)["logits"].squeeze(0)
+            aa_tokens_len = len(self.batch_tokens[0,1:-1]) # exclude start and stop tokens)
+            logits_target = logits_raw [1:(aa_tokens_len+1),4:24]
         # normalise logits to convert to probabilities 
         lsoftmax = torch.nn.LogSoftmax(dim=1)
-        logits = lsoftmax(logits_target)
+        normalised_logits = lsoftmax(logits_target)
+        self.all_logits = normalised_logits
+
+    def set_sequence_only_logits(self):
+        token_offset = 4
+        cleaned_batch_tokens = self.batch_tokens[0,1:-1] # remove start and stop tokens
+        sequence_only_logits = self.all_logits[torch.arange(self.all_logits.size(0)),cleaned_batch_tokens - token_offset]
+        self.sequence_only_logits = sequence_only_logits
     
-        return logits
+    def set_embeddings(self):
+        with torch.no_grad():
+            embeddings = self.model(self.batch_tokens, repr_layers=[33], return_contacts=True)
+        self.embeddings = embeddings
 
-    def get_current_seq_logits(self,batch_tokens,all_logits,token_offset=4):
-        current_seq_tokens = batch_tokens[0,1:-1]
-        current_seq_logits = all_logits[torch.arange(all_logits.size(0)),current_seq_tokens - token_offset]
-        return current_seq_logits
-
-    def mutate_seq(self,pos,aa_char):
-        list_seq = list(self.current_seq)
+    def generate_mutated_sequence(self,pos,aa_char):
+        list_seq = list(self.sequence)
         list_seq[pos] = aa_char
-        self.current_seq = "".join(list_seq)
+        mutated_seq = "".join(list_seq)
+        return mutated_seq
 
-    def get_logits(self,model,alphabet,batch_converter):
-        batch_tokens = self.get_batch_tokens(model,alphabet,batch_converter)
-        all_logits = self.get_all_logits(batch_tokens,model)
-        current_seq_logits = self.get_current_seq_logits(batch_tokens,all_logits)
-        return all_logits,current_seq_logits
         
-
+    # def evaluate_sequence_mutation(self): 
+    #     log_p = torch.log(self.current_seq_logits)
+    #     current_sequence_probability = torch.sum(log_p)
+    #     # set, then in another func compare change from previous sequence
+    #     # other ascpects to evaluate: increase protein fitness + antigenic pressure if applicable + functional + env via past data
+    #     return sequence_probability
