@@ -2,11 +2,11 @@ import torch
 from model_singleton import ModelSingleton
 
 class ProteinSequence:
-    def __init__(self,id,sequence,parent_seq=None,mutation=None):
+    def __init__(self,id,sequence,parent_seqs=[],mutation=None):
         self.id = id
-        self.parent_seq = parent_seq # previous seq
-        self.left_seq = None # child seq with lower score
-        self.right_seq = None # child seq with higher score
+        # directed acyclic graph to represent evolutionary paths
+        self.parent_seqs = parent_seqs # previous seq
+        self.child_seqs = [] 
         # esm data
         self.model = ModelSingleton().get_model()
         self.alphabet = ModelSingleton().get_alphabet()
@@ -25,14 +25,13 @@ class ProteinSequence:
         self.embeddings = None
         self.set_embeddings()
     
-    def set_parent_seq(self,seq):
-        self.parent_seq = seq
+    def add_parent_seq(self,parent_seq):
+        if parent_seq not in self.parent_seqs:
+            self.parent_seqs.append(parent_seq)
         
-    def set_left_seq(self,seq):
-        self.left_seq = seq
-    
-    def set_right_seq(self,seq):
-        self.right_seq = seq
+    def add_child_seq(self,child_seq):
+        if child_seq not in self.child_seqs:
+            self.child_seqs.append(child_seq)
 
     def set_mutation(self,mutation): # chosen and set by a MutationStrategy
         self.mutation = mutation
@@ -51,8 +50,8 @@ class ProteinSequence:
             aa_tokens_len = len(self.batch_tokens[0,1:-1]) # exclude start and stop tokens)
             logits_target = logits_raw [1:(aa_tokens_len+1),4:24]
         # normalise logits to convert to probabilities 
-        lsoftmax = torch.nn.LogSoftmax(dim=1)
-        normalised_logits = lsoftmax(logits_target)
+        softmax = torch.nn.Softmax(dim=1)
+        normalised_logits = softmax(logits_target)
         self.all_logits = normalised_logits
 
     def set_sequence_only_logits(self):
@@ -63,8 +62,8 @@ class ProteinSequence:
     
     def set_embeddings(self):
         with torch.no_grad():
-            embeddings = self.model(self.batch_tokens, repr_layers=[33], return_contacts=True)
-        self.embeddings = embeddings
+            results = self.model(self.batch_tokens, repr_layers=[33], return_contacts=True)
+        self.embeddings = results["representations"][33][0]
 
     def generate_mutated_sequence(self,pos,aa_char):
         list_seq = list(self.sequence)
@@ -73,9 +72,3 @@ class ProteinSequence:
         return mutated_seq
 
         
-    # def evaluate_sequence_mutation(self): 
-    #     log_p = torch.log(self.current_seq_logits)
-    #     current_sequence_probability = torch.sum(log_p)
-    #     # set, then in another func compare change from previous sequence
-    #     # other ascpects to evaluate: increase protein fitness + antigenic pressure if applicable + functional + env via past data
-    #     return sequence_probability
