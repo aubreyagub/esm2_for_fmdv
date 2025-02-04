@@ -19,7 +19,7 @@ class EvaluationStrategy:
 
     def is_sequence_functional(self,sequence):
         sequence_embedding = sequence.embeddings
-        previous_sequence_embedding = sequence.parent_seq.embeddings
+        previous_sequence_embedding = sequence.parent_seqs[-1].embeddings
         # compare with previous embeddings using a distance metric: cosine similarity
         # cosine_sim = F.cosine_similarity(sequence_embedding,previous_sequence_embedding,dim=1)
         # mean_cosine_sim = torch.mean(cosine_sim).item()

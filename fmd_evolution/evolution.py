@@ -22,20 +22,25 @@ class Evolution:
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
-        if generation<self.max_generations:
+        if generation<self.max_generations: # stop evovling when max generations reached
             all_logits = current_seq.all_logits
             sequence_only_logits = current_seq.sequence_only_logits 
             sequence = current_seq.sequence
-            pos,aa_char = self.mutation_strategy.get_next_mutation(sequence,all_logits,sequence_only_logits) # refactor to send whole object instead + add inside evaluation strategy
-            mutated_sequence = current_seq.generate_mutated_sequence(pos,aa_char) 
-            mutation = f"{pos}{aa_char}"
-            mutated_seq = self.add_new_seq(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation) # create new node for mutated seq 
-            print(f"Position mutated = {pos} with amino acid {aa_char}")
-            # check if mutated sequence is probable and functional
-            should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq)
-            print(f"Mutation Score: {mutated_seq.mutation_score}")
-            if should_continue_mutating:
-                self.evolve_sequence(current_seq=mutated_seq,generation=generation+1) 
+            # process potential mutations
+            mutations = self.mutation_strategy.get_next_mutations(sequence,all_logits,sequence_only_logits)
+            for pos,aa_char in mutations:
+                mutated_sequence = current_seq.generate_mutated_sequence(pos,aa_char) 
+                mutation = f"{pos}{aa_char}"
+                mutated_seq = self.add_new_seq(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation) # create new node for mutated seq 
+                print(f"Gen {generation}: current seq muatted at pos {pos} with aa {aa_char}, parent seq has mutation {current_seq.mutation}")
+                # check if mutated sequence is probable and functional
+                should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq)
+                print(f"Mutation Score: {mutated_seq.mutation_score}")
+                if should_continue_mutating:
+                    self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+
+            # pos,aa_char = self.mutation_strategy.get_next_mutation(sequence,all_logits,sequence_only_logits) # refactor to send whole object instead + add inside evaluation strategy
+             
 
     def add_new_seq(self,id,mutated_sequence,parent_seq,mutation):
         # mutation resulted in a new sequence 
