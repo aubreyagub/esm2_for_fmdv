@@ -16,22 +16,14 @@ class MutationStrategy(ABC):
     def get_next_mutations(self,current_seq,all_logits,current_seq_logits,start_pos=138,end_pos=143):
         pass
 
-    def index_to_char(self,aa):
-        return self.alphabet.all_toks[aa+self.token_offset] 
+    def index_to_char(self,aa_pos):
+        return self.alphabet.all_toks[aa_pos+self.token_offset] 
 
-    def get_aa_char(self,current_aa,new_aa_index):
-        aa_char = self.index_to_char(new_aa_index)
-        if current_aa!=aa_char:
-            return aa_char
-        else:
-            return None # new aa == current aa
-            
     def get_top_n_mutations(self, scores):
-        return np.argsort(scores)[-(self.mutations_per_seq):][::-1] # top 2 in case new aa == current aa
+        return np.argsort(scores)[-(self.mutations_per_seq+1):][::-1] # one extra in case current_aa is a potential mutation
 
-    def get_new_amino_acid(self,current_seq,pos):
-        current_aa = list(current_seq)[pos]
-        aa_char = self.get_aa_char(current_aa,pos)
+    def get_new_amino_acid(self,current_aa,aa_pos):
+        aa_char = self.index_to_char(aa_pos)
         if aa_char:
             return aa_char
         return None # no new aa
@@ -50,13 +42,16 @@ class MinLogitPosSub(MutationStrategy):
         min_logit_pos_logits = poss_of_interest_logits[min_logit_pos_relative]
 
         # generate mutations
-        potential_mutations = self.get_top_n_mutations(min_logit_pos_logits.numpy())
-        print(f"Potential mutations: {potential_mutations}")
+        potential_aa_positions = self.get_top_n_mutations(min_logit_pos_logits.numpy())
+        current_aa = list(current_seq)[min_logit_pos]
+        # print(f"Potential aa mutation positons: {potential_aa_positions}")
         mutations = []
-        for p_mut in potential_mutations:
-            aa_char = self.get_new_amino_acid(current_seq,p_mut)  
-            if aa_char:
+        for aa_pos in potential_aa_positions:
+            aa_char = self.get_new_amino_acid(current_aa,aa_pos)  
+            if aa_char!=current_aa:
                 mutations.append((min_logit_pos,aa_char))
+        if len(mutations)>self.mutations_per_seq:
+            mutations = mutations[:-1]
         return mutations
 
 # Use logic of MinLogitPosSub, weighted/penalty using blosum scores
@@ -92,15 +87,18 @@ class BlosumWeightedSub(MutationStrategy):
         poss_of_interest_logits = all_logits[self.start_pos:self.end_pos+1,:]
         min_logit_pos_logits = poss_of_interest_logits[min_logit_pos_relative]
 
-        ########### TO BE UPDATED TO WORK WITH MULTIPLE POTENTIAL MUTATIONS
-        # get weighted scores
+        # get new weighted scores for amino acids in given pos
         current_aa = list(current_seq)[min_logit_pos]
         blosum_scores = self.get_blosum_scores(current_aa)
         weighted_scores = self.weight_logits_with_blosum(blosum_scores,min_logit_pos_logits)
-        
-        # select new aa
-        candidates = self.get_top_n_mutations(np.array(weighted_scores))
-        aa_char = self.get_new_amino_acid(current_seq,min_logit_pos)
-        
-        return min_logit_pos,aa_char
-    
+
+        # generate mutations
+        potential_aa_mutations = self.get_top_n_mutations(np.array(weighted_scores))
+        current_aa = list(current_seq)[min_logit_pos]
+        # print(f"Potential mutations: {potential_mutations}")
+        mutations = []
+        for aa_pos in potential_aa_mutations:
+            aa_char = self.get_new_amino_acid(current_seq,aa_pos)  
+            if aa_char:
+                mutations.append((min_logit_pos,aa_char))
+        return mutations
