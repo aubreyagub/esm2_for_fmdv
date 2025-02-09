@@ -50,8 +50,7 @@ class MinLogitPosSub(MutationStrategy):
             aa_char = self.get_new_amino_acid(current_aa,aa_pos)  
             if aa_char!=current_aa:
                 mutations.append((min_logit_pos,aa_char))
-        if len(mutations)>self.mutations_per_seq:
-            mutations = mutations[:-1]
+        mutations = mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
         return mutations
 
 # Use logic of MinLogitPosSub, weighted/penalty using blosum scores

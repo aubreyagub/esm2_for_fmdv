@@ -3,6 +3,7 @@ from mutation_strategy import MutationStrategy, MinLogitPosSub
 from evaluation_strategy import EvaluationStrategy
 from model_singleton import ModelSingleton
 import networkx as nx
+import py
 import matplotlib.pyplot as plt
 
 class Evolution:
@@ -63,6 +64,17 @@ class Evolution:
             for child in seq_obj.child_seqs:
                 graph.add_edge(seq_obj.id,child.id,weight=child.mutation_score)
 
+        # compute node size
+        in_degrees = dict(graph.in_degree())
+        max_in_degree = max(in_degrees.values()) if in_degrees else 1
+        min_in_degree = min(in_degrees.values()) if in_degrees else 0
+        
+        # Normalize node sizes (scaling between 500 and 3000)
+        node_sizes = {
+            node: 500 + 2500 * (deg - min_in_degree) / (max_in_degree - min_in_degree) if max_in_degree != min_in_degree else 1000
+            for node, deg in in_degrees.items()
+        }
+
         # weight the edges
         edge_weights = nx.get_edge_attributes(graph,"weight")
         max_weight=max(edge_weights.values())
@@ -73,14 +85,16 @@ class Evolution:
         }
 
         plt.figure(figsize=(12,7))
-        pos = nx.spring_layout(graph, seed=42)
-        nx.draw(graph, pos, with_labels=True,node_color="lightgreen",edge_color="grey",node_size=2500,font_size=8)
+        #pos =  nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot") 
+        # pos = #nx.spring_layout(graph) # change layout of graph
+        pos = nx.kamada_kawai_layout(graph)  # add seed for reproducibility
+        nx.draw(graph, pos, with_labels=True,node_size=[node_sizes[n] for n in graph.nodes()])
 
         labels = nx.get_node_attributes(graph,"label")
-        nx.draw_networkx_labels(graph,pos,labels=labels,font_size=10,font_color="darkgreen")
+        nx.draw_networkx_labels(graph,pos,labels=labels,font_size=10,)
 
         edge_widths = [norm_weights.get(edge, 1) * 2 for edge in graph.edges()]
-        nx.draw_networkx_edges(graph, pos, width=edge_widths, edge_color="black")
+        nx.draw_networkx_edges(graph, pos, arrowsize=20, width=edge_widths)
 
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
