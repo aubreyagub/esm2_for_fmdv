@@ -5,15 +5,15 @@ import numpy as np
 
 class MutationStrategy(ABC):
     @abstractmethod
-    def __init__(self,mutations_per_seq=2):
+    def __init__(self,mutations_per_seq=2,start_pos=138,end_pos=143):
         self.mutations_per_seq = mutations_per_seq
         self.alphabet = ModelSingleton().get_alphabet()
-        self.start_pos = 138
-        self.end_pos = 143
+        self.start_pos = start_pos
+        self.end_pos = end_pos
         self.token_offset=4 # index of aa in alphabet begins at 4
     
     @abstractmethod
-    def get_next_mutations(self,current_seq,all_logits,current_seq_logits,start_pos=138,end_pos=143):
+    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
         pass
 
     def index_to_char(self,aa_pos):
@@ -30,10 +30,10 @@ class MutationStrategy(ABC):
         
 # Mutate through substitution the position with the minimum logit 
 class MinLogitPosSub(MutationStrategy):
-    def __init__(self,mutations_per_seq=2):
-        super().__init__(mutations_per_seq)
+    def __init__(self,mutations_per_seq=2,start_pos=138,end_pos=143):
+        super().__init__(mutations_per_seq,start_pos,end_pos)
 
-    def get_next_mutations(self,current_seq,all_logits,current_seq_logits,start_pos=138,end_pos=143):
+    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
         poss_of_interest_current_seq_logits = current_seq_logits[self.start_pos:self.end_pos+1]
         min_logit_pos_relative = np.argmin(poss_of_interest_current_seq_logits)
         min_logit_pos = (self.start_pos+min_logit_pos_relative).item()
@@ -56,8 +56,8 @@ class MinLogitPosSub(MutationStrategy):
 
 # Use logic of MinLogitPosSub, weighted/penalty using blosum scores
 class BlosumWeightedSub(MutationStrategy):
-    def __init__(self,blosum_matrix,multiplier=None,mutations_per_seq=2,):
-        super().__init__(mutations_per_seq)
+    def __init__(self,blosum_matrix,multiplier=None,mutations_per_seq=2,start_pos=138,end_pos=143):
+        super().__init__(mutations_per_seq,start_pos,end_pos)
         self.blosum_matrix = blosum_matrix
         self.multiplier = multiplier
 
@@ -79,7 +79,7 @@ class BlosumWeightedSub(MutationStrategy):
                 weighted_scores[logit_index] = logit_val # unweighted scores, same as MinLogitPosSub
         return weighted_scores
 
-    def get_next_mutations(self,current_seq,all_logits,current_seq_logits,start_pos=138,end_pos=143):
+    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
         poss_of_interest_current_seq_logits = current_seq_logits[self.start_pos:self.end_pos+1]
         min_logit_pos_relative = np.argmin(poss_of_interest_current_seq_logits)
         min_logit_pos = (self.start_pos+min_logit_pos_relative).item()
