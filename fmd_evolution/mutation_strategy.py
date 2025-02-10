@@ -82,6 +82,7 @@ class BlosumWeightedSub(MutationStrategy):
     def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
         # get position with minimum logit score and its logit scores
         min_logit_pos,min_logit_pos_logits = self.get_min_logits_and_pos(current_seq_logits,all_logits)
+        
         # get new weighted scores for amino acids in given pos
         current_aa = list(current_seq)[min_logit_pos]
         blosum_scores = self.get_blosum_scores(current_aa)
@@ -90,10 +91,10 @@ class BlosumWeightedSub(MutationStrategy):
         # generate mutations
         potential_aa_mutations = self.get_top_n_mutations(np.array(weighted_scores))
         current_aa = list(current_seq)[min_logit_pos]
-        # print(f"Potential mutations: {potential_mutations}")
         mutations = []
         for aa_pos in potential_aa_mutations:
             aa_char = self.get_new_amino_acid(current_seq,aa_pos)  
-            if aa_char:
+            if aa_char!=current_aa:
                 mutations.append((min_logit_pos,aa_char))
+        mutations = mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
         return mutations
