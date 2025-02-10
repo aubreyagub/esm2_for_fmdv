@@ -12,10 +12,6 @@ class MutationStrategy(ABC):
         self.end_pos = end_pos
         self.token_offset=4 # index of aa in alphabet begins at 4
     
-    @abstractmethod
-    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
-        pass
-
     def index_to_char(self,aa_pos):
         return self.alphabet.all_toks[aa_pos+self.token_offset] 
 
@@ -27,13 +23,8 @@ class MutationStrategy(ABC):
         if aa_char:
             return aa_char
         return None # no new aa
-        
-# Mutate through substitution the position with the minimum logit 
-class MinLogitPosSub(MutationStrategy):
-    def __init__(self,mutations_per_seq=2,start_pos=138,end_pos=143):
-        super().__init__(mutations_per_seq,start_pos,end_pos)
-
-    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
+    
+    def get_min_logits_and_pos(self,current_seq_logits,all_logits):
         poss_of_interest_current_seq_logits = current_seq_logits[self.start_pos:self.end_pos+1]
         min_logit_pos_relative = np.argmin(poss_of_interest_current_seq_logits)
         min_logit_pos = (self.start_pos+min_logit_pos_relative).item()
@@ -41,6 +32,16 @@ class MinLogitPosSub(MutationStrategy):
         poss_of_interest_logits = all_logits[self.start_pos:self.end_pos+1,:]
         min_logit_pos_logits = poss_of_interest_logits[min_logit_pos_relative]
 
+        return min_logit_pos,min_logit_pos_logits
+        
+# Mutate through substitution the position with the minimum logit 
+class MinLogitPosSub(MutationStrategy):
+    def __init__(self,mutations_per_seq=2,start_pos=138,end_pos=143):
+        super().__init__(mutations_per_seq,start_pos,end_pos)
+
+    def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
+        # get position with minimum logit score and its logit scores
+        min_logit_pos,min_logit_pos_logits = self.get_min_logits_and_pos(current_seq_logits,all_logits)
         # generate mutations
         potential_aa_positions = self.get_top_n_mutations(min_logit_pos_logits.numpy())
         current_aa = list(current_seq)[min_logit_pos]
@@ -79,13 +80,8 @@ class BlosumWeightedSub(MutationStrategy):
         return weighted_scores
 
     def get_next_mutations(self,current_seq,all_logits,current_seq_logits):
-        poss_of_interest_current_seq_logits = current_seq_logits[self.start_pos:self.end_pos+1]
-        min_logit_pos_relative = np.argmin(poss_of_interest_current_seq_logits)
-        min_logit_pos = (self.start_pos+min_logit_pos_relative).item()
-
-        poss_of_interest_logits = all_logits[self.start_pos:self.end_pos+1,:]
-        min_logit_pos_logits = poss_of_interest_logits[min_logit_pos_relative]
-
+        # get position with minimum logit score and its logit scores
+        min_logit_pos,min_logit_pos_logits = self.get_min_logits_and_pos(current_seq_logits,all_logits)
         # get new weighted scores for amino acids in given pos
         current_aa = list(current_seq)[min_logit_pos]
         blosum_scores = self.get_blosum_scores(current_aa)
