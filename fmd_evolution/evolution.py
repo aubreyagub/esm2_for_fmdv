@@ -14,6 +14,8 @@ class Evolution:
         self.max_generations = max_generations
         self.dag = {} # id = unique sequence id, value = sequence object
         self.dag[root_sequence.id] = root_sequence
+        self.G = nx.DiGraph() ########################################
+        self.G.add_node(root_sequence.id,object=root_sequence) ###############################
         # esm data
         self.model = ModelSingleton().get_model()
         self.alphabet = ModelSingleton().get_alphabet()
@@ -36,34 +38,48 @@ class Evolution:
                 mutation = f"{pos}{aa_char}"
                 mutated_seq = self.get_seq_node(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
                 if mutated_seq: # mutation resulted in a new sequence
-                    # check if mutated sequence is probable and functional
-                    should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq)
+                    should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq) # check if mutated sequence is probable and functional, and add mutation score
+                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)###########################
+                    if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle ######################
+                        self.G.remove_edge(current_seq.id,mutated_seq.id) #############################################
                     if should_continue_mutating:
                         self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
-        return # stop evolving if max generations reached
+        return # stop evolving since max generations reached
 
     def get_seq_node(self,id,mutated_sequence,parent_seq,mutation):
         # mutation resulted in a new sequence 
-        if mutated_sequence not in self.dag:
+        if mutated_sequence not in self.dag: 
             mutated_seq = ProteinSequence(id=id,sequence=mutated_sequence,parent_seqs=[parent_seq],mutation=mutation) # create new node
             self.dag[mutated_sequence] = mutated_seq
+            mutated_seq.add_parent_seq(parent_seq)
             parent_seq.add_child_seq(mutated_seq)
+            if id not in self.G.nodes: ####################
+                self.G.add_node(mutated_seq.id,object=mutated_seq) ###############################
             return mutated_seq
         # mutation resulted in an existing sequence
         else:
             mutated_seq = self.dag[mutated_sequence] # retrieve existing node 
             if parent_seq not in mutated_seq.child_seqs: # disallow  reverse mutations
+                self.evaluation_strategy.should_continue_mutating(mutated_seq) # adds mutation score #######################
                 mutated_seq.add_parent_seq(parent_seq)
                 parent_seq.add_child_seq(mutated_seq)
-            return # stop evolving if mutation has already occured
+                self.G.add_edge(parent_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)###########################
+                if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle #####################
+                    self.G.remove_edge(parent_seq.id,mutated_seq.id) #######################
+            return # stop evolving since mutation has already occured
         
-        
-    def visualise_evolution_dag(self):
-        graph = nx.DiGraph()
-        for seq,seq_obj in self.dag.items():
-            graph.add_node(seq_obj.id)
-            for child in seq_obj.child_seqs:
-                graph.add_edge(seq_obj.id,child.id,weight=child.mutation_score)
+    def get_path_with_highest_mutation_score(self):
+        # get the path with the highest mutation score
+        path = nx.dag_longest_path(self.G, weight="weight")
+        # visualise longest path
+        self.visualise_graph(self.G.subgraph(path))
+        return path
+    
+    def visualise_graph(self,graph,seed=0):
+        graph_is_a_dag = nx.is_directed_acyclic_graph(graph)
+
+        if not graph_is_a_dag:
+            return "Evolution graph is not a directed acyclic graph therefore topological sorting cannot be applied"
 
         # compute node size
         in_degrees = dict(graph.in_degree())
@@ -86,9 +102,9 @@ class Evolution:
         }
 
         plt.figure(figsize=(12,7))
-        #pos =  nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot") 
-        # pos = #nx.spring_layout(graph) # change layout of graph
-        pos = nx.kamada_kawai_layout(graph)  # add seed for reproducibility
+        # pos =  nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot",seed=seed) 
+        pos = nx.spring_layout(graph,k=3,seed=seed) 
+        # pos = nx.kamada_kawai_layout(graph,seed=seed)  
         nx.draw(graph, pos, with_labels=True,node_size=[node_sizes[n] for n in graph.nodes()])
 
         labels = nx.get_node_attributes(graph,"label")
@@ -99,6 +115,19 @@ class Evolution:
 
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
+
+    def visualise_evolution_dag(self):
+        graph = nx.DiGraph()
+        for seq,seq_obj in self.dag.items():
+            graph.add_node(seq_obj.id)
+            for child in seq_obj.child_seqs:
+                graph.add_edge(seq_obj.id,child.id,weight=child.mutation_score)
+        
+        self.visualise_graph(graph)
+
+    def visualise_evolution_G(self):
+        self.visualise_graph(self.G)
+
         
 # compare logits with next step and see the change
     

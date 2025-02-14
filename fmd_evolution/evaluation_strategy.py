@@ -30,14 +30,16 @@ class EvaluationStrategy:
         functional_score = 1 - mean_l2_distance # so both metrics are in the same direction
         return functional_score>self.functional_threshold,functional_score
     
-    def should_continue_mutating(self,sequence):
+    def should_continue_mutating(self,sequence):  ######### refactor to only check threshold
         is_probable,sequence_p = self.is_sequence_probable(sequence)
         is_functional,cosine_sim = self.is_sequence_functional(sequence)
         sequence.mutation_score = (sequence_p + cosine_sim)/2 # average of scores
         if is_probable and is_functional:
-            return True
+            return True 
         else:
             return False
+    
+    # create new function to combine score and call in evolution
         
 
     # next steps: instead of just checking it falls above a threshold, I need to cehck the direction of change (increased or decrese) to correspond with increased or decreased fitness
