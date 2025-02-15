@@ -17,13 +17,13 @@ class EvaluationStrategy:
         log_p = torch.log(sequence_aa_logits) # epsilon to avoid nan
         mean_log_p = torch.mean(log_p)
         sequence_p = torch.exp(mean_log_p)
-        return sequence_p
+        return sequence_p.item()
     
     def is_sequence_functional(self,sequence_p): # sequence probability as approximation of fitness
         return self.min_p <= sequence_p
     
-    def is_sequence_probability_increasing(self, seq_p,parent_seq_p):
-        return seq_p>parent_seq_p 
+    def is_sequence_probability_not_decreasing(self, seq_p,parent_seq_p):
+        return seq_p>=parent_seq_p 
 
     def get_sequence_structure_score(self,sequence,parent_sequence):
         sequence_embedding = sequence.embeddings
@@ -70,17 +70,26 @@ class EvaluationStrategy:
         is_sequence_structurally_similar = self.is_sequence_structurally_similar(sequence_f_score)
         return is_functional and is_sequence_structurally_similar
 
-    def should_continue_mutating(self,sequence,parent_sequence):  ######### refactor to only check threshold
-        sequence_p,sequence_f_score = self.get_sequence_scores(sequence,parent_sequence)
-        parent_sequence_p,parent_f_score = self.get_parent_scores(parent_sequence)
 
-        is_probability_increasing = self.is_sequence_probability_increasing(sequence_p,parent_sequence_p)
-        is_sequence_structure_increasing = self.is_sequence_structure_increasing(sequence_f_score,parent_f_score)
+    def should_continue_mutating(self,sequence,parent_sequence):  
+        # sequence_p,sequence_f_score = self.get_sequence_scores(sequence,parent_sequence)
+        # parent_sequence_p,parent_f_score = self.get_parent_scores(parent_sequence)
 
-        if is_probability_increasing and is_sequence_structure_increasing:
-            return True 
+        # is_probability_increasing = self.is_sequence_probability_not_decreasing(sequence_p,parent_sequence_p)
+        # is_sequence_structure_increasing = self.is_sequence_structure_increasing(sequence_f_score,parent_f_score)
+
+        # if is_probability_increasing and is_sequence_structure_increasing:
+        #     return True 
+        # else:
+        #     return False
+        
+        sequence_mutation_score = sequence.mutation_score
+        parent_sequence_mutation_score = parent_sequence.mutation_score
+        if sequence_mutation_score>=parent_sequence_mutation_score: # use change in mutation score over probability and structure for robustness
+            return True # mutate
         else:
-            return False
+            return False # terminate path
+
     
         
         
