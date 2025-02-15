@@ -24,6 +24,7 @@ class Evolution:
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
+            current_seq.mutation_score = 0 # root seq is unmutated
 
         if generation<self.max_generations: # stop evovling when max generations reached
             # process potential mutations
