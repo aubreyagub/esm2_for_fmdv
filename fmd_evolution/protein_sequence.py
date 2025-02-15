@@ -18,10 +18,10 @@ class ProteinSequence:
         # plm processed data
         self.batch_tokens = None
         self.set_batch_tokens()
-        self.all_logits = None
-        self.set_all_logits()
-        self.sequence_only_logits = None
-        self.set_sequence_only_logits()
+        self.all_aa_logits = None
+        self.set_all_aa_logits()
+        self.sequence_aa_logits = None
+        self.set_sequence_logits()
         self.embeddings = None
         self.set_embeddings()
     
@@ -41,24 +41,23 @@ class ProteinSequence:
 
     def set_batch_tokens(self):
         data = [(self.id,self.sequence)]
-        batch_labels, batch_strs, batch_tokens = self.batch_converter(data)
+        _, _, batch_tokens = self.batch_converter(data)
         self.batch_tokens = batch_tokens
 
-    def set_all_logits(self):
+    def set_all_aa_logits(self):
         with torch.no_grad():
             logits_raw = self.model(self.batch_tokens)["logits"].squeeze(0)
-            aa_tokens_len = len(self.batch_tokens[0,1:-1]) # exclude start and stop tokens)
+            aa_tokens_len = len(self.batch_tokens[0,1:-1]) # exclude start and stop tokens
             logits_target = logits_raw [1:(aa_tokens_len+1),4:24]
         # normalise logits to convert to probabilities 
         softmax = torch.nn.Softmax(dim=1)
-        normalised_logits = softmax(logits_target)
-        self.all_logits = normalised_logits
+        self.all_aa_logits = softmax(logits_target)
 
-    def set_sequence_only_logits(self):
-        token_offset = 4
-        cleaned_batch_tokens = self.batch_tokens[0,1:-1] # remove start and stop tokens
-        sequence_only_logits = self.all_logits[torch.arange(self.all_logits.size(0)),cleaned_batch_tokens - token_offset]
-        self.sequence_only_logits = sequence_only_logits
+    def set_sequence_logits(self):
+        token_offset = 4 # index of amino acids in alphabet begins at 4
+        aa_tokens = self.batch_tokens[0,1:-1]  # exclude start and stop tokens
+        sequence_aa_logits = self.all_aa_logits[torch.arange(self.all_aa_logits.size(0)),aa_tokens - token_offset]
+        self.sequence_aa_logits = sequence_aa_logits
     
     def set_embeddings(self):
         with torch.no_grad():
