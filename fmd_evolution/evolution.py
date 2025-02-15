@@ -12,61 +12,55 @@ class Evolution:
         self.mutation_strategy = mutation_strategy
         self.evaluation_strategy = evaluation_strategy
         self.max_generations = max_generations
-        self.dag = {} # id = unique sequence id, value = sequence object
-        self.dag[root_sequence.id] = root_sequence
-        self.G = nx.DiGraph() ########################################
-        self.G.add_node(root_sequence.id,object=root_sequence) ###############################
+        self.G = nx.DiGraph()
+        self.G.add_node(root_sequence.id,object=root_sequence)
         # esm data
         self.model = ModelSingleton().get_model()
         self.alphabet = ModelSingleton().get_alphabet()
         self.batch_converter = ModelSingleton().get_batch_converter()
         
-        # population to select from + be able to go back and choose another path 
         # track sequence_probability over time and ensure this doesn't go down too much (fitness landscape) - sampling then search & constrain
 
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
+
         if generation<self.max_generations: # stop evovling when max generations reached
-            all_logits = current_seq.all_logits
-            sequence_only_logits = current_seq.sequence_only_logits 
-            sequence = current_seq.sequence
             # process potential mutations
-            potential_mutations = self.mutation_strategy.get_next_mutations(sequence,all_logits,sequence_only_logits) # refactor to send whole object instead + add inside evaluation strategy
+            potential_mutations = self.mutation_strategy.get_next_mutations(current_seq) 
+            print(potential_mutations)
             for pos,aa_char in potential_mutations:
                 mutated_sequence = current_seq.generate_mutated_sequence(pos,aa_char) 
                 mutation = f"{pos}{aa_char}"
-                mutated_seq = self.get_seq_node(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
-                if mutated_seq: # mutation resulted in a new sequence
-                    should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq) # check if mutated sequence is probable and functional, and add mutation score
-                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)###########################
-                    if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle ######################
-                        self.G.remove_edge(current_seq.id,mutated_seq.id) #############################################
+                mutated_seq = self.get_or_create_seq_node(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
+                
+                if current_seq in mutated_seq.child_seqs: 
+                    continue # disallow  reverse mutations
+
+                should_accept_mutation = self.evaluation_strategy.should_accept_mutated_sequence(mutated_seq,current_seq)
+                if should_accept_mutation: # sequence is probable and functional
+                    mutated_seq.add_parent_seq(current_seq)
+                    current_seq.add_child_seq(mutated_seq)
+                    self.evaluation_strategy.set_mutation_score(mutated_seq,current_seq) 
+                    self.G.add_node(mutated_seq.id,object=mutated_seq)
+                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)
+                    if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle
+                        self.G.remove_edge(current_seq.id,mutated_seq.id)
+                    
+                    should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq,current_seq) # sequence probability and functional score are increasing
                     if should_continue_mutating:
                         self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
-        return # stop evolving since max generations reached
+            print("Stop evolving")
+            return # stop evolving since max generations reached
 
-    def get_seq_node(self,id,mutated_sequence,parent_seq,mutation):
+    def get_or_create_seq_node(self,id,mutated_sequence,parent_seq,mutation):
         # mutation resulted in a new sequence 
-        if mutated_sequence not in self.dag: 
+        if id not in self.G.nodes: 
             mutated_seq = ProteinSequence(id=id,sequence=mutated_sequence,parent_seqs=[parent_seq],mutation=mutation) # create new node
-            self.dag[mutated_sequence] = mutated_seq
-            mutated_seq.add_parent_seq(parent_seq)
-            parent_seq.add_child_seq(mutated_seq)
-            if id not in self.G.nodes: ####################
-                self.G.add_node(mutated_seq.id,object=mutated_seq) ###############################
-            return mutated_seq
         # mutation resulted in an existing sequence
         else:
-            mutated_seq = self.dag[mutated_sequence] # retrieve existing node 
-            if parent_seq not in mutated_seq.child_seqs: # disallow  reverse mutations
-                self.evaluation_strategy.should_continue_mutating(mutated_seq) # adds mutation score #######################
-                mutated_seq.add_parent_seq(parent_seq)
-                parent_seq.add_child_seq(mutated_seq)
-                self.G.add_edge(parent_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)###########################
-                if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle #####################
-                    self.G.remove_edge(parent_seq.id,mutated_seq.id) #######################
-            return # stop evolving since mutation has already occured
+            mutated_seq = self.G.nodes[id]["object"] # get existing node
+        return mutated_seq
         
     def get_path_with_highest_mutation_score(self):
         # get the path with the highest mutation score
@@ -115,15 +109,6 @@ class Evolution:
 
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
-
-    def visualise_evolution_dag(self):
-        graph = nx.DiGraph()
-        for seq,seq_obj in self.dag.items():
-            graph.add_node(seq_obj.id)
-            for child in seq_obj.child_seqs:
-                graph.add_edge(seq_obj.id,child.id,weight=child.mutation_score)
-        
-        self.visualise_graph(graph)
 
     def visualise_evolution_G(self):
         self.visualise_graph(self.G)
