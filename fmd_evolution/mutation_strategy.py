@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from protein_sequence import ProteinSequence
 from model_singleton import ModelSingleton
 import numpy as np
+import torch
 
 class MutationStrategy(ABC):
     @abstractmethod
@@ -24,13 +25,26 @@ class MutationStrategy(ABC):
             return aa_char
         return None # no new aa
     
-    def get_min_logit_pos_and_values(self,sequence_aa_logits,all_aa_logits):
-        relevant_segment_logits = sequence_aa_logits[self.start_pos:self.end_pos+1]
-        relative_min_logit_position = np.argmin(relevant_segment_logits)
-        absolute_min_logit_position = (self.start_pos+relative_min_logit_position).item()
-
+    def get_average_min_logit_pos(self,all_aa_logits): 
+        pos_mean_logits = torch.mean(all_aa_logits,dim=1) # use average over direct aa logit for robustness 
+        relevant_segment_logits = pos_mean_logits[self.start_pos:self.end_pos+1]
+        relative_min_logit_position = torch.argmin(relevant_segment_logits).item()
+        absolute_min_logit_position = self.start_pos+relative_min_logit_position
+        return relative_min_logit_position,absolute_min_logit_position
+    
+    # def get_min_logit_pos(self,sequence_aa_logits):
+    #     relevant_segment_logits = sequence_aa_logits[self.start_pos:self.end_pos+1]
+    #     relative_min_logit_position = np.argmin(relevant_segment_logits)
+    #     absolute_min_logit_position = (self.start_pos+relative_min_logit_position).item()
+    #     return relative_min_logit_position,absolute_min_logit_position
+    
+    def get_position_logit_values(self,relative_position,all_aa_logits):
         relevant_segment_amino_acids_logits = all_aa_logits[self.start_pos:self.end_pos+1,:]
-        aa_logits_at_min_logit_position = relevant_segment_amino_acids_logits[relative_min_logit_position]
+        return relevant_segment_amino_acids_logits[relative_position]
+    
+    def get_min_logit_pos_and_values(self,sequence_aa_logits,all_aa_logits):
+        relative_min_logit_position,absolute_min_logit_position = self.get_average_min_logit_pos(all_aa_logits) ##################
+        aa_logits_at_min_logit_position = self.get_position_logit_values(relative_min_logit_position,all_aa_logits)
 
         return absolute_min_logit_position,aa_logits_at_min_logit_position
     
@@ -87,7 +101,6 @@ class BlosumWeightedSub(MutationStrategy):
         only_valid_amino_acid_cols = row_for_char[0:-4] # final 5 columns are not standard amino acids
         return only_valid_amino_acid_cols
 
-    
     def weight_logits_with_blosum(self,blosum_scores,logit_scores):
         blosum_alphabet = self.blosum_matrix.alphabet[0:-4] # final 5 columns are not standard amino acids
         weighted_scores = [0 for i in range(20)] 
@@ -101,7 +114,6 @@ class BlosumWeightedSub(MutationStrategy):
         return weighted_scores
 
     def get_next_mutations(self,current_seq):     
-        sequence = current_seq.sequence
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 
