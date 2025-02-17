@@ -24,7 +24,7 @@ class Evolution:
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
-            current_seq.mutation_score = 0 # root seq is unmutated
+            current_seq.mutation_score = 1 # root seq is unmutated
 
         if generation<self.max_generations: # stop evovling when max generations reached
             # process potential mutations
@@ -69,8 +69,8 @@ class Evolution:
         if len(self.G.nodes)==1:
             print("The root node was not mutated, therefore there is are no paths.")
             return None
-        path = nx.dag_longest_path(self.G, weight="weight")
-        # path = nx.dijkstra_path(self.G, source=self.root_sequence, target= weight="weight")
+        path = nx.dag_longest_path(self.G, weight="weight") #works for positive weight values
+        # path = nx.shortest_path(self.G, source=self.root_sequence.id, weight="weight", method="dijkstra")
         
         # visualise longest path
         if path:

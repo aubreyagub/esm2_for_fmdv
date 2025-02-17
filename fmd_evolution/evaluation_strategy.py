@@ -9,40 +9,35 @@ class EvaluationStrategy:
         self.f_tolerance = f_tolerance
         self.root_p = None
         self.root_p = self.get_sequence_probability(self.root_sequence)
-        self.min_p = self.root_p - self.p_tolerance
-        self.min_s_score = 1 - self.f_tolerance
+        self.max_p = self.root_p + self.p_tolerance
+        self.max_s_score = self.f_tolerance
 
     def get_sequence_probability(self,sequence):
         sequence_aa_logits = sequence.sequence_aa_logits
         log_p = torch.log(sequence_aa_logits) # epsilon to avoid nan
         mean_log_p = torch.mean(log_p)
         sequence_p = torch.exp(mean_log_p)
-        return sequence_p.item()
+        return 1-sequence_p.item() # so both metrics are in the same direction, min value is better
     
     def is_sequence_functional(self,sequence_p): # sequence probability as approximation of fitness
-        return self.min_p <= sequence_p
+        return sequence_p<=self.max_p
     
-    def is_sequence_probability_not_decreasing(self, seq_p,parent_seq_p):
-        return seq_p>=parent_seq_p 
+    def is_sequence_probability_increasing(self, seq_p,parent_seq_p):
+        return seq_p<=parent_seq_p # check if decreasing as score is inverted
 
     def get_sequence_structure_score(self,sequence,parent_sequence):
         sequence_embedding = sequence.embeddings
         parent_sequence_embedding = parent_sequence.embeddings
-        # compare with previous embeddings using a distance metric: cosine similarity
-        # cosine_sim = F.cosine_similarity(sequence_embedding,previous_sequence_embedding,dim=1)
-        # mean_cosine_sim = torch.mean(cosine_sim).item()
-        # print(f"Cosine similarity = {mean_cosine_sim}")
-        # return mean_cosine_sim> self.functional_threshold,mean_cosine_sim
         l2_distance = torch.norm(sequence_embedding - parent_sequence_embedding, p=2, dim=1)
         mean_l2_distance = torch.mean(l2_distance).item()
-        functional_score = 1 - mean_l2_distance # so both metrics are in the same direction
+        functional_score = mean_l2_distance 
         return functional_score
 
     def is_sequence_structurally_similar(self,sequence_functional_score):
-        return self.min_s_score <= sequence_functional_score 
+        return sequence_functional_score <= self.max_s_score
     
-    def is_sequence_structure_increasing(self,seq_f_score,parent_seq_f_score):
-        return seq_f_score>parent_seq_f_score
+    def is_sequence_structure_similarity_improving(self,seq_f_score,parent_seq_f_score):
+        return seq_f_score<parent_seq_f_score
     
     def get_sequence_scores(self,sequence,parent_sequence):
         sequence_p = self.get_sequence_probability(sequence)
@@ -72,20 +67,9 @@ class EvaluationStrategy:
 
 
     def should_continue_mutating(self,sequence,parent_sequence):  
-        # sequence_p,sequence_f_score = self.get_sequence_scores(sequence,parent_sequence)
-        # parent_sequence_p,parent_f_score = self.get_parent_scores(parent_sequence)
-
-        # is_probability_increasing = self.is_sequence_probability_not_decreasing(sequence_p,parent_sequence_p)
-        # is_sequence_structure_increasing = self.is_sequence_structure_increasing(sequence_f_score,parent_f_score)
-
-        # if is_probability_increasing and is_sequence_structure_increasing:
-        #     return True 
-        # else:
-        #     return False
-        
         sequence_mutation_score = sequence.mutation_score
         parent_sequence_mutation_score = parent_sequence.mutation_score
-        if sequence_mutation_score>=parent_sequence_mutation_score: # use change in mutation score over probability and structure for robustness
+        if sequence_mutation_score<=parent_sequence_mutation_score: # use change in mutation score over probability and structure for robustness
             return True # mutate
         else:
             return False # terminate path
