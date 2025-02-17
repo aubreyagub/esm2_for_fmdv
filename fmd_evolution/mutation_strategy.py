@@ -61,7 +61,7 @@ class MutationStrategy(ABC):
         cleaned_aa_chars = aa_chars[remove_redundant_mutation_mask]    
 
         min_logit_as_array = [min_logit_pos]*len(cleaned_aa_chars)
-        mutations = np.array(list(zip(min_logit_as_array,cleaned_aa_chars)))
+        mutations = list(zip(min_logit_as_array,cleaned_aa_chars))
         return mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
 
     def acceptance_ratio(self,current_seq):
