@@ -2,11 +2,11 @@ import torch
 from model_singleton import ModelSingleton
 
 class ProteinSequence:
-    def __init__(self,id,sequence,parent_seqs=[],mutation=None):
+    def __init__(self,id,sequence,parent_seqs=None,mutation=None):
         self.id = id
         # directed acyclic graph to represent evolutionary paths
-        self.parent_seqs = parent_seqs # previous seq
-        self.child_seqs = [] 
+        self.parent_seqs = set(parent_seqs) if parent_seqs else set()
+        self.child_seqs = set()
         # esm data
         self.model = ModelSingleton().get_model()
         self.alphabet = ModelSingleton().get_alphabet()
@@ -25,13 +25,11 @@ class ProteinSequence:
         self.embeddings = None
         self.set_embeddings()
     
-    def add_parent_seq(self,parent_seq):
-        if parent_seq not in self.parent_seqs:
-            self.parent_seqs.append(parent_seq)
+    def add_parent_seq(self,parent_seq_id):
+        self.parent_seqs.add(parent_seq_id)
         
-    def add_child_seq(self,child_seq):
-        if child_seq not in self.child_seqs:
-            self.child_seqs.append(child_seq)
+    def add_child_seq(self,child_seq_id):
+        self.child_seqs.add(child_seq_id)
 
     def set_mutation(self,mutation): # chosen and set by a MutationStrategy
         self.mutation = mutation
