@@ -7,7 +7,7 @@ import torch
 class MutationStrategy(ABC):
     @abstractmethod
     def __init__(self,mutations_per_seq=20,start_pos=138,end_pos=143):
-        self.mutations_per_seq = mutations_per_seq
+        self.mutations_per_seq = mutations_per_seq # 20 means consider all possible amino acids
         self.alphabet = ModelSingleton().get_alphabet()
         self.start_pos = start_pos
         self.end_pos = end_pos
@@ -50,14 +50,19 @@ class MutationStrategy(ABC):
     
     def validate_potential_mutations(self,current_seq,min_logit_pos,potential_aa_positions):
         current_aa = list(current_seq)[min_logit_pos]
-        # print(f"Potential aa mutation positons: {potential_aa_positions}")
-        mutations = []
-        for aa_pos in potential_aa_positions:
-            aa_char = self.get_new_amino_acid(current_aa,aa_pos)  
-            if aa_char!=current_aa: 
-                mutations.append((min_logit_pos,aa_char))
-        mutations = mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
-        return mutations
+
+        potential_aa_positions = np.array(potential_aa_positions)
+        adjusted_potential_aa_positions = potential_aa_positions+self.token_offset # match aa positions to esm alphabet aa indices
+
+        alphabet_tokens = np.array(self.alphabet.all_toks)
+        aa_chars = alphabet_tokens[adjusted_potential_aa_positions] # convert positions to aa chars
+
+        remove_redundant_mutation_mask = aa_chars!=current_aa 
+        cleaned_aa_chars = aa_chars[remove_redundant_mutation_mask]    
+
+        min_logit_as_array = [min_logit_pos]*len(cleaned_aa_chars)
+        mutations = list(zip(min_logit_as_array,cleaned_aa_chars))
+        return mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
 
     def acceptance_ratio(self,current_seq):
         # Metropolis-Hastings acceptance ratio
@@ -68,7 +73,7 @@ class MutationStrategy(ABC):
         ratio = (new_aa_p/current_aa_p)*(current_aa_given_new/new_aa_given_current)
         return min(1,ratio)
     
-    def should_accept_mutation(self,mutated_seq):
+    def should_accept_mutation(self):
         return True
 
 # Mutate through substitution the position with the minimum logit 
