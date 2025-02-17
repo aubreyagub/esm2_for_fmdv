@@ -44,15 +44,16 @@ class Evolution:
                     current_seq.add_child_seq(mutated_seq)
                     self.evaluation_strategy.set_mutation_score(mutated_seq,current_seq) 
                     self.G.add_node(mutated_seq.id,object=mutated_seq)
-                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)
+                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score)  # negate score for dag operations
                     if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle
                         self.G.remove_edge(current_seq.id,mutated_seq.id)
                     
                     should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq,current_seq) # sequence probability and functional score are increasing
                     if should_continue_mutating:
                         self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
-            print("Stop evolving")
-            return # stop evolving since max generations reached
+        else:
+            print("Max generations reached for this path.")     
+        return # stop evolving since max generations reached
 
     def get_or_create_seq_node(self,id,mutated_sequence,parent_seq,mutation):
         # mutation resulted in a new sequence 
@@ -65,9 +66,18 @@ class Evolution:
         
     def get_path_with_highest_mutation_score(self):
         # get the path with the highest mutation score
+        if len(self.G.nodes)==1:
+            print("The root node was not mutated, therefore there is are no paths.")
+            return None
         path = nx.dag_longest_path(self.G, weight="weight")
+        # path = nx.dijkstra_path(self.G, source=self.root_sequence, target= weight="weight")
+        
         # visualise longest path
-        self.visualise_graph(self.G.subgraph(path))
+        if path:
+            self.visualise_graph(self.G.subgraph(path))
+        else:
+            print("No path found.")
+            return None
         return path
     
     def visualise_graph(self,graph,seed=0):
