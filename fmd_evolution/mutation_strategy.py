@@ -64,18 +64,6 @@ class MutationStrategy(ABC):
         mutations = list(zip(min_logit_as_array,cleaned_aa_chars))
         return mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
 
-    def acceptance_ratio(self,current_seq):
-        # Metropolis-Hastings acceptance ratio
-        new_aa_p = None
-        current_aa_p = None
-        new_aa_given_current = None
-        current_aa_given_new = None
-        ratio = (new_aa_p/current_aa_p)*(current_aa_given_new/new_aa_given_current)
-        return min(1,ratio)
-    
-    def should_accept_mutation(self):
-        return True
-
 # Mutate through substitution the position with the minimum logit 
 class MinLogitPosSub(MutationStrategy):
     def __init__(self,mutations_per_seq=20,start_pos=138,end_pos=143):
@@ -132,4 +120,59 @@ class BlosumWeightedSub(MutationStrategy):
         # generate mutations
         potential_aa_positions = self.get_top_n_mutations(np.array(weighted_scores))
         mutations = self.validate_potential_mutations(sequence,min_logit_pos,potential_aa_positions)
+        return mutations
+
+class MetropolisHastings(MutationStrategy):
+    def __init__(self,iterations=6,positions_per_seq=5,mutations_per_seq=1,start_pos=138,end_pos=143):
+        super().__init__(mutations_per_seq,start_pos,end_pos)
+        self.iterations = iterations
+        self.positions_per_seq = positions_per_seq
+
+    def get_probability_distro_of_positions(self,sequence_aa_logits):
+        relevant_segment_logits = (sequence_aa_logits[self.start_pos:self.end_pos+1]).numpy()
+        recomputed_softmax = np.exp(relevant_segment_logits - np.max(relevant_segment_logits))
+        relevant_probs = recomputed_softmax/recomputed_softmax.sum()
+        return  relevant_probs # normalise to get probabilities and ensure sum to 1
+        
+    def sample_a_position(self,probability_distro):
+        relative_pos = np.random.choice(len(probability_distro),p=probability_distro)
+        return self.start_pos+relative_pos # absolute position
+    
+    def calculate_acceptance_ratio(self,current_pos,new_pos,probability_distro):
+        current_pos_p = probability_distro[current_pos]
+        new_pos_p = probability_distro[new_pos]
+        acceptance_ratio = min(1,new_pos_p/current_pos_p)
+        return acceptance_ratio
+
+    def should_accept_pos(self,acceptance_ratio):
+        random_number = np.random.uniform(0,1)
+        if random_number<=acceptance_ratio:
+            return True 
+        else:
+            return False
+        
+    def get_position_via_mh(self,sequence_aa_logits):
+        probability_distro = self.get_probability_distro_of_positions(sequence_aa_logits)
+        current_pos = self.sample_a_position(probability_distro) # initialise
+        for i in range(self.iterations):
+            new_pos = self.sample_a_position(probability_distro)
+            acceptance_ratio = self.calculate_acceptance_ratio(current_pos,new_pos,probability_distro)
+            if self.should_accept_pos(acceptance_ratio):
+                current_pos = new_pos
+        return current_pos
+
+    
+    def get_next_mutations(self,current_seq):
+        sequence = current_seq.sequence
+        all_aa_logits = current_seq.all_aa_logits
+        sequence_aa_logits = current_seq.sequence_aa_logits 
+        mutations = []
+        for i in range(self.positions_per_seq):
+            mh_pos = self.get_position_via_mh(sequence_aa_logits)
+            relative_pos = mh_pos-self.start_pos
+            aa_logits_at_mh_position = self.get_position_logit_values(relative_pos,all_aa_logits)
+            potential_aa_positions = self.get_top_n_mutations(aa_logits_at_mh_position.numpy())
+            validated_mutations = self.validate_potential_mutations(sequence,mh_pos,potential_aa_positions)
+            mutations.extend(validated_mutations)
+            mutations = list(set(mutations)) # remove duplicates
         return mutations
