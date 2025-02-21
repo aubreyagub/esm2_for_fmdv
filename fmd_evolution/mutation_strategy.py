@@ -9,9 +9,9 @@ class MutationStrategy(ABC):
     def __init__(self,mutations_per_seq=20,start_pos=138,end_pos=143):
         self.mutations_per_seq = mutations_per_seq # 20 means consider all possible amino acids
         self.alphabet = ModelSingleton().get_alphabet()
-        self.start_pos = start_pos
-        self.end_pos = end_pos
-        self.token_offset=4 # index of aa in alphabet begins at 4
+        self.start_pos = start_pos-1 # amino acid positions are 1-indexed
+        self.end_pos = end_pos-1 # amino acid positions are 1-indexed
+        self.token_offset=4 # index of aa in esm alphabet begins at 4
     
     def index_to_char(self,aa_pos):
         return self.alphabet.all_toks[aa_pos+self.token_offset] 
@@ -19,7 +19,7 @@ class MutationStrategy(ABC):
     def get_top_n_mutations(self, scores):
         return np.argsort(scores)[-(self.mutations_per_seq+1):][::-1] # one extra in case current_aa is a potential mutation
 
-    def get_new_amino_acid(self,current_aa,aa_pos):
+    def get_new_amino_acid(self,aa_pos):
         aa_char = self.index_to_char(aa_pos)
         if aa_char:
             return aa_char
@@ -48,6 +48,9 @@ class MutationStrategy(ABC):
 
         return absolute_min_logit_position,aa_logits_at_min_logit_position
     
+    def get_absolute_aa_positions(self,aa_positions):
+        return aa_positions + self.token_offset
+        
     def validate_potential_mutations(self,current_seq,min_logit_pos,potential_aa_positions):
         current_aa = list(current_seq)[min_logit_pos]
 
@@ -123,25 +126,35 @@ class BlosumWeightedSub(MutationStrategy):
         return mutations
 
 class MetropolisHastings(MutationStrategy):
-    def __init__(self,iterations=6,positions_per_seq=5,mutations_per_seq=1,start_pos=138,end_pos=143):
+    def __init__(self,iterations=10,positions_per_seq=5,mutations_per_seq=2,start_pos=138,end_pos=143):
         super().__init__(mutations_per_seq,start_pos,end_pos)
         self.iterations = iterations
         self.positions_per_seq = positions_per_seq
 
+    def get_probability_distro_of_amino_acids(self,aa_logits_at_mh_position):
+        aa_logits_at_mh_position = aa_logits_at_mh_position.numpy()
+        recomputed_softmax = np.exp(aa_logits_at_mh_position - np.max(aa_logits_at_mh_position))
+        relevant_probs = recomputed_softmax/recomputed_softmax.sum() # normalise to get probabilities and ensure sum to 1
+        return  relevant_probs 
+
     def get_probability_distro_of_positions(self,sequence_aa_logits):
         relevant_segment_logits = (sequence_aa_logits[self.start_pos:self.end_pos+1]).numpy()
         recomputed_softmax = np.exp(relevant_segment_logits - np.max(relevant_segment_logits))
-        relevant_probs = recomputed_softmax/recomputed_softmax.sum()
-        return  relevant_probs # normalise to get probabilities and ensure sum to 1
+        relevant_probs = recomputed_softmax/recomputed_softmax.sum() # normalise to get probabilities and ensure sum to 1
+        return  relevant_probs 
         
+    def sample_an_amino_acid(self,probability_distro):
+        relative_aa_index = np.random.choice(len(probability_distro),p=probability_distro)
+        return relative_aa_index # relative since absolute index is calculated at index to char conversion
+
     def sample_a_position(self,probability_distro):
         relative_pos = np.random.choice(len(probability_distro),p=probability_distro)
         return self.start_pos+relative_pos # absolute position
     
-    def calculate_acceptance_ratio(self,current_pos,new_pos,probability_distro):
-        current_pos_p = probability_distro[current_pos]
-        new_pos_p = probability_distro[new_pos]
-        acceptance_ratio = min(1,new_pos_p/current_pos_p)
+    def calculate_acceptance_ratio(self,current_val,new_val,probability_distro):
+        current_p = probability_distro[current_val]
+        new_p = probability_distro[new_val]
+        acceptance_ratio = min(1,new_p/current_p)
         return acceptance_ratio
 
     def should_accept_pos(self,acceptance_ratio):
@@ -150,29 +163,44 @@ class MetropolisHastings(MutationStrategy):
             return True 
         else:
             return False
-        
+
+    def get_amino_acid_via_mh(self,aa_logits_at_mh_position):
+        probability_distro = self.get_probability_distro_of_amino_acids(aa_logits_at_mh_position)
+        current_aa = self.sample_an_amino_acid(probability_distro)
+        for _ in range(self.iterations):
+            new_aa = self.sample_an_amino_acid(probability_distro)
+            acceptance_ratio = self.calculate_acceptance_ratio(current_aa,new_aa,probability_distro)
+            if self.should_accept_pos(acceptance_ratio):
+                current_aa = new_aa
+        return current_aa
+
     def get_position_via_mh(self,sequence_aa_logits):
         probability_distro = self.get_probability_distro_of_positions(sequence_aa_logits)
-        current_pos = self.sample_a_position(probability_distro) # initialise
-        for i in range(self.iterations):
+        current_pos = self.sample_a_position(probability_distro) # initialise to a random pos
+        for _ in range(self.iterations):
             new_pos = self.sample_a_position(probability_distro)
-            acceptance_ratio = self.calculate_acceptance_ratio(current_pos,new_pos,probability_distro)
+            relative_current_pos = current_pos-self.start_pos
+            relative_new_pos = new_pos-self.start_pos
+            acceptance_ratio = self.calculate_acceptance_ratio(relative_current_pos,relative_new_pos,probability_distro)
             if self.should_accept_pos(acceptance_ratio):
                 current_pos = new_pos
         return current_pos
 
-    
     def get_next_mutations(self,current_seq):
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 
+
         mutations = []
-        for i in range(self.positions_per_seq):
-            mh_pos = self.get_position_via_mh(sequence_aa_logits)
-            relative_pos = mh_pos-self.start_pos
-            aa_logits_at_mh_position = self.get_position_logit_values(relative_pos,all_aa_logits)
-            potential_aa_positions = self.get_top_n_mutations(aa_logits_at_mh_position.numpy())
-            validated_mutations = self.validate_potential_mutations(sequence,mh_pos,potential_aa_positions)
+        for _ in range(self.positions_per_seq):
+            mh_absolute_pos = self.get_position_via_mh(sequence_aa_logits)
+            mh_relative_pos = mh_absolute_pos-self.start_pos
+
+            aa_logits_at_mh_position = self.get_position_logit_values(mh_relative_pos,all_aa_logits)
+            mh_potential_aa_positions = np.array([self.get_amino_acid_via_mh(aa_logits_at_mh_position) for _ in range(self.mutations_per_seq)]) 
+
+            validated_mutations = self.validate_potential_mutations(sequence,mh_absolute_pos+1,mh_potential_aa_positions) # adjust pos for 1-indexing
             mutations.extend(validated_mutations)
-            mutations = list(set(mutations)) # remove duplicates
+
+        mutations = list(set(mutations)) # remove duplicates
         return mutations
