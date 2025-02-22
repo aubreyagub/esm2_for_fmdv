@@ -52,19 +52,19 @@ class MutationStrategy(ABC):
         return aa_positions + self.token_offset
         
     def validate_potential_mutations(self,current_seq,min_logit_pos,potential_aa_positions):
-        current_aa = list(current_seq)[min_logit_pos]
+        current_aa_chars = list(current_seq)[min_logit_pos]
 
         potential_aa_positions = np.array(potential_aa_positions)
         adjusted_potential_aa_positions = potential_aa_positions+self.token_offset # match aa positions to esm alphabet aa indices
 
         alphabet_tokens = np.array(self.alphabet.all_toks)
-        aa_chars = alphabet_tokens[adjusted_potential_aa_positions] # convert positions to aa chars
+        new_aa_chars = alphabet_tokens[adjusted_potential_aa_positions] # convert positions to aa chars
 
-        remove_redundant_mutation_mask = aa_chars!=current_aa 
-        cleaned_aa_chars = aa_chars[remove_redundant_mutation_mask]    
+        remove_redundant_mutation_mask = new_aa_chars!=current_aa_chars
+        cleaned_new_aa_chars = new_aa_chars[remove_redundant_mutation_mask]    
 
-        min_logit_as_array = [min_logit_pos]*len(cleaned_aa_chars)
-        mutations = list(zip(min_logit_as_array,cleaned_aa_chars))
+        min_logit_as_array = [min_logit_pos]*len(cleaned_new_aa_chars) 
+        mutations = list(zip(current_aa_chars,min_logit_as_array,cleaned_new_aa_chars)) 
         return mutations[:self.mutations_per_seq] # ensure only the specified number of mutations are returned
 
 # Mutate through substitution the position with the minimum logit 
@@ -192,7 +192,7 @@ class MetropolisHastings(MutationStrategy):
 
     def get_next_mutations(self,current_seq):
         current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
-        
+
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 
@@ -205,7 +205,7 @@ class MetropolisHastings(MutationStrategy):
             aa_logits_at_mh_position = self.get_position_logit_values(mh_relative_pos,all_aa_logits)
             mh_potential_aa_positions = np.array([self.get_amino_acid_via_mh(aa_logits_at_mh_position) for _ in range(self.mutations_per_seq)]) 
 
-            validated_mutations = self.validate_potential_mutations(sequence,mh_absolute_pos+1,mh_potential_aa_positions) # adjust pos for 1-indexing
+            validated_mutations = self.validate_potential_mutations(sequence,mh_absolute_pos,mh_potential_aa_positions)
             mutations.extend(validated_mutations)
 
         mutations = list(set(mutations)) # remove duplicates

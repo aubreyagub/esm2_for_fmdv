@@ -35,9 +35,9 @@ class Evolution:
                 return
             print(potential_mutations)
 
-            for pos,aa_char in potential_mutations:
-                mutated_sequence = current_seq.generate_mutated_sequence(pos,aa_char) 
-                mutation = f"{list(current_seq.sequence)[pos]}{pos}{aa_char}"
+            for current_aa_char,pos,new_aa_char in potential_mutations:
+                mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
+                mutation = f"{current_aa_char}{str(int(pos)+1)}{new_aa_char}" # adjust pos displayed for 1-indexing
                 mutated_seq = self.get_or_create_seq_node(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
                 
                 if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
