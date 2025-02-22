@@ -5,6 +5,7 @@ from model_singleton import ModelSingleton
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
+from Bio import SeqIO
 
 class Evolution:
     def __init__(self,root_sequence,mutation_strategy,evaluation_strategy,max_generations): #evaluation_strategy
@@ -18,6 +19,8 @@ class Evolution:
         self.model = ModelSingleton().get_model()
         self.alphabet = ModelSingleton().get_alphabet()
         self.batch_converter = ModelSingleton().get_batch_converter()
+        # evaluation data
+        self.np_alignments_seq_records = None
 
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
@@ -88,7 +91,9 @@ class Evolution:
             return None
         return path
     
-    def visualise_graph(self,graph,seed=0):
+    def visualise_graph(self,graph=None,seed=0):
+        if graph is None:
+            graph = self.G # visualise the entire graph
         graph_is_a_dag = nx.is_directed_acyclic_graph(graph)
 
         if not graph_is_a_dag:
@@ -129,8 +134,21 @@ class Evolution:
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
 
-    def visualise_evolution_G(self):
-        self.visualise_graph(self.G)
+    def evaluate_path_using_alignments(self,evolutionary_path,file_path):
+        self.process_alignment_data(file_path) # process alignment data
+        data_length = len(self.np_alignments_seq_records)
 
-        
-# compare logits with next step and see the change
+        for seq_id in evolutionary_path:
+            seq = self.G.nodes[seq_id]["object"]
+            self.evaluate_sequence_using_alignments(seq_id,seq,data_length)
+
+    def evaluate_sequence_using_alignments(self,seq_id,seq,data_length):
+        np_predicted_constrained_seq = np.array(seq.constrained_seq)
+        num_of_matches = np.sum(np_predicted_constrained_seq==self.np_alignments_seq_records)
+        percentage_of_matches = num_of_matches/data_length
+        print(f"Percentage of matches for {seq_id}: {percentage_of_matches}")
+
+    def process_alignment_data(self,file_path):
+        seq_records = list(SeqIO.parse(file_path, "fasta"))
+        self.np_alignments_seq_records = np.array([str(record.seq) for record in seq_records])
+        return self.np_alignments_seq_records
