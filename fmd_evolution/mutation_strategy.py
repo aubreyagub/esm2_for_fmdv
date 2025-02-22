@@ -73,6 +73,8 @@ class MinLogitPosSub(MutationStrategy):
         super().__init__(mutations_per_seq,start_pos,end_pos)
 
     def get_next_mutations(self,current_seq):
+        current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
+
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 
@@ -110,6 +112,8 @@ class BlosumWeightedSub(MutationStrategy):
         return weighted_scores
 
     def get_next_mutations(self,current_seq):     
+        current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
+
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 
@@ -187,6 +191,8 @@ class MetropolisHastings(MutationStrategy):
         return current_pos
 
     def get_next_mutations(self,current_seq):
+        current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
+        
         sequence = current_seq.sequence
         all_aa_logits = current_seq.all_aa_logits
         sequence_aa_logits = current_seq.sequence_aa_logits 

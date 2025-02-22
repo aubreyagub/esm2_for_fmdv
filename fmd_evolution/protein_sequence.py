@@ -13,6 +13,7 @@ class ProteinSequence:
         self.batch_converter = ModelSingleton().get_batch_converter()
         # sequence data
         self.sequence = sequence
+        self.constrained_seq = None # to be set in MutationStrategy
         self.mutation = mutation # to be set using a MutationStrategy 
         self.mutation_score = None # to be set using an EvaluationStrategy
         # plm processed data
