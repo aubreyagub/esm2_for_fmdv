@@ -33,7 +33,6 @@ class Evolution:
             if len(potential_mutations)==0: 
                 print("No potential mutations found.")
                 return
-            print(potential_mutations)
 
             for current_aa_char,pos,new_aa_char in potential_mutations:
                 mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
@@ -140,13 +139,29 @@ class Evolution:
 
         for seq_id in evolutionary_path:
             seq = self.G.nodes[seq_id]["object"]
-            self.evaluate_sequence_using_alignments(seq_id,seq,data_length)
+            self.evaluate_mutation_only_using_alignments(seq_id,data_length)
+            self.evaluate_full_segment_using_alignments(seq_id,seq,data_length)
 
-    def evaluate_sequence_using_alignments(self,seq_id,seq,data_length):
+        return
+
+    def evaluate_full_segment_using_alignments(self,seq_id,seq,alignment_data_length):
         np_predicted_constrained_seq = np.array(seq.constrained_seq)
         num_of_matches = np.sum(np_predicted_constrained_seq==self.np_alignments_seq_records)
-        percentage_of_matches = num_of_matches/data_length
-        print(f"Percentage of matches for {seq_id}: {percentage_of_matches}")
+        percentage_of_matches = (num_of_matches/alignment_data_length)*100
+        print(f"Percentage of full segment matches for {seq_id}: {percentage_of_matches}")
+
+    def evaluate_mutation_only_using_alignments(self,seq_id,data_length):
+        if seq_id==self.root_sequence.id:
+            print(f"Percentage of mutation matches for {seq_id}: n/a (root sequence)")
+            return # root seq is unmutated so no mutation to evaluate
+        mutated_pos = int(seq_id[1:-1])-1 # adjust pos to 0-indexing
+        new_aa = seq_id[-1] 
+        # check percentage of matches for the mutated position containing the new amino acid
+        relative_mutated_pos = mutated_pos - self.mutation_strategy.start_pos # start pos is already 0-indexed so add 1
+        alignment_amino_acids = np.array([seq_record[relative_mutated_pos] for seq_record in self.np_alignments_seq_records])
+        num_of_matches = np.sum(alignment_amino_acids==new_aa)
+        percentage_of_matches = (num_of_matches/data_length)*100
+        print(f"Percentage of mutation matches for {seq_id}: {percentage_of_matches}")
 
     def process_alignment_data(self,file_path):
         seq_records = list(SeqIO.parse(file_path, "fasta"))
