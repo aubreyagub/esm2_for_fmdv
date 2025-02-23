@@ -73,26 +73,52 @@ class Evolution:
         orig_aa_char,pos,new_aa_char = mutation_seq_id[0],mutation_seq_id[1:-1],mutation_seq_id[-1]
         reverse_mutation = f"{new_aa_char}{pos}{orig_aa_char}"
         return reverse_mutation==parent_seq_id
-        
-    def get_path_with_highest_mutation_score(self):
-        # get the path with the highest mutation score
-        if len(self.G.nodes)==1:
-            print("The root node was not mutated, therefore there is are no paths.")
-            return None
-        path = nx.dag_longest_path(self.G, weight="weight") #works for positive weight values
-        # path = nx.shortest_path(self.G, source=self.root_sequence.id, weight="weight", method="dijkstra")
-        
-        # visualise longest path
-        if path:
-            self.visualise_graph(self.G.subgraph(path))
-        else:
-            print("No path found.")
-            return None
-        return path
     
-    def visualise_graph(self,graph=None,seed=0):
-        if graph is None:
+    def get_pool_of_best_paths(self):
+        if not nx.is_directed_acyclic_graph(self.G):
+            print("Topological sorting cannot be applied as graph is not a directed acyclic graph.")
+            return None
+        path_distances,shortest_paths_to_every_node = nx.single_source_dijkstra(self.G, source=self.root_sequence.id,weight="weight")
+
+        leaf_nodes = [node for node in self.G.nodes if self.G.out_degree(node)==0] # use to filter out intermediate nodes
+        shortest_path_to_leaf_nodes = {node:shortest_paths_to_every_node[node] for node in leaf_nodes}
+        path_distances_to_leaf_nodes = {node:path_distances[node] for node in leaf_nodes}
+
+        return path_distances_to_leaf_nodes,shortest_path_to_leaf_nodes
+    
+    def sort_paths_by_mutation_score(self,distances,paths):
+        sorted_paths = sorted(paths.items(), key=lambda item: distances[item[0]])
+        return sorted_paths
+
+    # def get_path_with_best_mutation_score(self,distances,pool_of_best_paths):
+    #     # from pool of best paths, get path with the lowest mutation score
+        
+    #     if distances and pool_of_best_paths:
+    #         best_path = min(distances,key=distances.get) # get path with the lowest overall mutation score
+    #         self.visualise_graph(self.G.subgraph(pool_of_best_paths[best_path]))
+    #     else:
+    #         print("No paths found.")
+        
+    # def get_path_with_best_mutation_score(self):
+    #     # get the path with the highest mutation score
+    #     if len(self.G.nodes)==1:
+    #         print("The root node was not mutated, therefore there is are no paths.")
+    #         return None
+    #     #path = nx.dag_longest_path(self.G, weight="weight") #works for positive weight values
+    #     #path = nx.shortest_path(self.G, source=self.root_sequence.id, weight="weight", method="dijkstra")
+        
+    #     # visualise longest path
+    #     if path:
+    #         self.visualise_graph(self.G.subgraph(path))
+    #     else:
+    #         print("No path found.")
+    #         return None
+    #     return path
+    
+    def visualise_graph(self,path=None,seed=0):
+        if path is None:
             graph = self.G # visualise the entire graph
+        graph = self.G.subgraph(path) 
         graph_is_a_dag = nx.is_directed_acyclic_graph(graph)
 
         if not graph_is_a_dag:
@@ -141,14 +167,14 @@ class Evolution:
             seq = self.G.nodes[seq_id]["object"]
             self.evaluate_mutation_only_using_alignments(seq_id,data_length)
             self.evaluate_full_segment_using_alignments(seq_id,seq,data_length)
-
         return
 
     def evaluate_full_segment_using_alignments(self,seq_id,seq,alignment_data_length):
         np_predicted_constrained_seq = np.array(seq.constrained_seq)
         num_of_matches = np.sum(np_predicted_constrained_seq==self.np_alignments_seq_records)
-        percentage_of_matches = (num_of_matches/alignment_data_length)*100
-        print(f"Percentage of full segment matches for {seq_id}: {percentage_of_matches}")
+        percentage_of_matches = round((num_of_matches/alignment_data_length)*100,3)
+        print(f"% of full segment matches for {seq_id}: {percentage_of_matches}")
+        return percentage_of_matches
 
     def evaluate_mutation_only_using_alignments(self,seq_id,data_length):
         if seq_id==self.root_sequence.id:
@@ -160,8 +186,9 @@ class Evolution:
         relative_mutated_pos = mutated_pos - self.mutation_strategy.start_pos # start pos is already 0-indexed so add 1
         alignment_amino_acids = np.array([seq_record[relative_mutated_pos] for seq_record in self.np_alignments_seq_records])
         num_of_matches = np.sum(alignment_amino_acids==new_aa)
-        percentage_of_matches = (num_of_matches/data_length)*100
-        print(f"Percentage of mutation matches for {seq_id}: {percentage_of_matches}")
+        percentage_of_matches = round((num_of_matches/data_length)*100,3)
+        print(f"% of mutation matches for {seq_id}: {percentage_of_matches}")
+        return percentage_of_matches
 
     def process_alignment_data(self,file_path):
         seq_records = list(SeqIO.parse(file_path, "fasta"))
