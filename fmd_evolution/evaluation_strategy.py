@@ -8,11 +8,11 @@ class EvaluationStrategy:
         self.p_tolerance = p_tolerance
         self.f_tolerance = f_tolerance
         self.root_p = None
-        self.root_p = self.get_sequence_probability(self.root_sequence)
+        self.root_p = self.get_sequence_likelihood(self.root_sequence)
         self.max_p = self.root_p + self.p_tolerance
         self.max_s_score = self.f_tolerance
 
-    def get_sequence_probability(self,sequence):
+    def get_sequence_likelihood(self,sequence):
         sequence_aa_logits = sequence.sequence_aa_logits
         log_p = torch.log(sequence_aa_logits) # epsilon to avoid nan
         mean_log_p = torch.mean(log_p)
@@ -22,16 +22,18 @@ class EvaluationStrategy:
     def is_sequence_functional(self,sequence_p): # sequence probability as approximation of fitness
         return sequence_p<=self.max_p
     
-    def is_sequence_probability_increasing(self, seq_p,parent_seq_p):
+    def is_sequence_likelihood_increasing(self, seq_p,parent_seq_p):
         return seq_p<=parent_seq_p # check if decreasing as score is inverted
 
-    def get_sequence_structure_score(self,sequence,parent_sequence):
+    def get_embedding_distance(self,sequence,parent_sequence):
         sequence_embedding = sequence.embeddings
         parent_sequence_embedding = parent_sequence.embeddings
-        l2_distance = torch.norm(sequence_embedding - parent_sequence_embedding, p=2, dim=1)
-        mean_l2_distance = torch.mean(l2_distance).item()
-        functional_score = mean_l2_distance 
-        return functional_score
+        cosine_similarity = F.cosine_similarity(sequence_embedding,parent_sequence_embedding,dim=1)
+        embedding_distance = 1-cosine_similarity.mean().item() # so both metrics are in the same direction, min value is better
+        # l2_distance = torch.norm(sequence_embedding - parent_sequence_embedding, p=2, dim=1)
+        # mean_l2_distance = torch.mean(l2_distance).item()
+        # functional_score = mean_l2_distance 
+        return embedding_distance
 
     def is_sequence_structurally_similar(self,sequence_functional_score):
         return sequence_functional_score <= self.max_s_score
@@ -40,14 +42,14 @@ class EvaluationStrategy:
         return seq_f_score<parent_seq_f_score
     
     def get_sequence_scores(self,sequence,parent_sequence):
-        sequence_p = self.get_sequence_probability(sequence)
-        sequence_f_score = self.get_sequence_structure_score(sequence,parent_sequence)
+        sequence_p = self.get_sequence_likelihood(sequence)
+        sequence_f_score = self.get_embedding_distance(sequence,parent_sequence)
         return sequence_p,sequence_f_score
 
     def get_parent_scores(self,parent_sequence):
-        parent_p = self.get_sequence_probability(parent_sequence)
+        parent_p = self.get_sequence_likelihood(parent_sequence)
         if parent_sequence.parent_seqs:
-            parent_f_score = self.get_sequence_structure_score(parent_sequence,parent_sequence.parent_seqs[-1])
+            parent_f_score = self.get_embedding_distance(parent_sequence,parent_sequence.parent_seqs[-1])
         else:
             parent_f_score = 0 # root node does not have a parent
         return parent_p,parent_f_score
