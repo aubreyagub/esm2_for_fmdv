@@ -3,6 +3,7 @@ from protein_sequence import ProteinSequence
 from model_singleton import ModelSingleton
 import numpy as np
 import torch
+np.random.seed = 42 # for reproducibility
 
 class MutationStrategy(ABC):
     @abstractmethod
@@ -161,7 +162,7 @@ class MetropolisHastings(MutationStrategy):
         acceptance_ratio = min(1,new_p/current_p)
         return acceptance_ratio
 
-    def should_accept_pos(self,acceptance_ratio):
+    def should_accept(self,acceptance_ratio):
         random_number = np.random.uniform(0,1)
         if random_number<=acceptance_ratio:
             return True 
@@ -174,7 +175,7 @@ class MetropolisHastings(MutationStrategy):
         for _ in range(self.iterations):
             new_aa = self.sample_an_amino_acid(probability_distro)
             acceptance_ratio = self.calculate_acceptance_ratio(current_aa,new_aa,probability_distro)
-            if self.should_accept_pos(acceptance_ratio):
+            if self.should_accept(acceptance_ratio):
                 current_aa = new_aa
         return current_aa
 
@@ -186,7 +187,7 @@ class MetropolisHastings(MutationStrategy):
             relative_current_pos = current_pos-self.start_pos
             relative_new_pos = new_pos-self.start_pos
             acceptance_ratio = self.calculate_acceptance_ratio(relative_current_pos,relative_new_pos,probability_distro)
-            if self.should_accept_pos(acceptance_ratio):
+            if self.should_accept(acceptance_ratio):
                 current_pos = new_pos
         return current_pos
 
