@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 from Bio import SeqIO
+np.random.seed = 42 # for reproducibility
 
 class Evolution:
     def __init__(self,root_sequence,mutation_strategy,evaluation_strategy,max_generations): #evaluation_strategy
@@ -25,7 +26,7 @@ class Evolution:
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
-            current_seq.mutation_score = 1 # root seq is unmutated therefore has max worse score
+            current_seq.mutation_score = 0 # root seq is unmutated therefore has min worse score
 
         if generation<self.max_generations: 
             # process potential mutations
@@ -41,20 +42,25 @@ class Evolution:
                 
                 if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
                     continue # disallow  reverse mutations
-
-                should_accept_mutation = self.evaluation_strategy.should_accept_mutated_sequence(mutated_seq,current_seq)
-                if should_accept_mutation: # based on seq probability and similarity
+                
+                mutation_score = self.evaluation_strategy.get_mutation_score(mutated_seq,current_seq)
+                is_mutation_viable = self.evaluation_strategy.is_mutation_viable(current_seq,mutation_score)
+                if is_mutation_viable: # based on seq probability and similarity
+                    mutated_seq.set_mutation_score(mutation_score)
                     mutated_seq.add_parent_seq(current_seq.id)
                     current_seq.add_child_seq(mutated_seq.id)
-                    self.evaluation_strategy.set_mutation_score(mutated_seq,current_seq) 
                     self.G.add_node(mutated_seq.id,object=mutated_seq)
-                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutated_seq.mutation_score) 
+                    self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutation_score) 
                     if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle
                         self.G.remove_edge(current_seq.id,mutated_seq.id)
                             
-                    should_continue_mutating = self.evaluation_strategy.should_continue_mutating(mutated_seq,current_seq) # based on improvement of mutation score
-                    if should_continue_mutating:
-                        self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+                    self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+
+                # else: # prune branch with non-viable mutation
+                #     if current_seq.id in self.G.nodes: 
+                #         self.prune_branch(current_seq.id)
+                #         print(f"Pruned branch leading to mutation {mutation}")
+                #     continue
 
         else:
             print("Max generations reached for this path.")     
@@ -74,13 +80,43 @@ class Evolution:
         reverse_mutation = f"{new_aa_char}{pos}{orig_aa_char}"
         return reverse_mutation==parent_seq_id
     
-    def get_pool_of_best_paths(self):
+    def prune_branch(self,seq_id):
+        if seq_id not in self.G.nodes:
+            return 
+        seq = self.G.nodes[seq_id]
+        if "object" not in seq: 
+            return  
+        if self.G.out_degree(seq_id)==0: # only prune if it is a leaf node
+            seq = self.G.nodes[seq_id]["object"]
+            parent_seqs = seq.parent_seqs
+            self.G.remove_node(seq_id)
+
+            for parent_id in parent_seqs:
+                if self.G.out_degree(parent_id)==0: 
+                    self.prune_branch(parent_id) # recursively prune ancestor nodes with no other children
+
+        return
+    
+    def get_best_paths_in_order(self):
         if not nx.is_directed_acyclic_graph(self.G):
             print("Topological sorting cannot be applied as graph is not a directed acyclic graph.")
             return None
-        path_distances,shortest_paths_to_every_node = nx.single_source_dijkstra(self.G, source=self.root_sequence.id,weight="weight")
+        
+        path_mean_mutation_scores = []
+        leaf_nodes = [node for node in self.G.nodes if self.G.out_degree(node)==0] # use to filter out paths to intermediate nodes
+        for leaf in leaf_nodes:
+            path = nx.shortest_path(self.G,source=self.root_sequence.id,target=leaf,weight="weight")
+            path_mutation_scores = [self.G.nodes[seq_id]["object"].mutation_score for seq_id in path]
+            mean_mutation_score = sum(path_mutation_scores)/len(path_mutation_scores)
+            path_mean_mutation_scores.append((mean_mutation_score,path))
 
-        leaf_nodes = [node for node in self.G.nodes if self.G.out_degree(node)==0] # use to filter out intermediate nodes
+        best_paths_in_order = sorted(path_mean_mutation_scores, key=lambda x:x[0], reverse=True) # maximise score
+        return best_paths_in_order
+
+
+
+
+        path_distances,shortest_paths_to_every_node = nx.single_source_dijkstra(self.G, source=self.root_sequence.id,weight="weight")
         shortest_path_to_leaf_nodes = {node:shortest_paths_to_every_node[node] for node in leaf_nodes}
         path_distances_to_leaf_nodes = {node:path_distances[node] for node in leaf_nodes}
 
@@ -89,31 +125,6 @@ class Evolution:
     def sort_paths_by_mutation_score(self,distances,paths):
         sorted_paths = sorted(paths.items(), key=lambda item: distances[item[0]])
         return sorted_paths
-
-    # def get_path_with_best_mutation_score(self,distances,pool_of_best_paths):
-    #     # from pool of best paths, get path with the lowest mutation score
-        
-    #     if distances and pool_of_best_paths:
-    #         best_path = min(distances,key=distances.get) # get path with the lowest overall mutation score
-    #         self.visualise_graph(self.G.subgraph(pool_of_best_paths[best_path]))
-    #     else:
-    #         print("No paths found.")
-        
-    # def get_path_with_best_mutation_score(self):
-    #     # get the path with the highest mutation score
-    #     if len(self.G.nodes)==1:
-    #         print("The root node was not mutated, therefore there is are no paths.")
-    #         return None
-    #     #path = nx.dag_longest_path(self.G, weight="weight") #works for positive weight values
-    #     #path = nx.shortest_path(self.G, source=self.root_sequence.id, weight="weight", method="dijkstra")
-        
-    #     # visualise longest path
-    #     if path:
-    #         self.visualise_graph(self.G.subgraph(path))
-    #     else:
-    #         print("No path found.")
-    #         return None
-    #     return path
     
     def visualise_graph(self,path=None,seed=0):
         if path is None:
@@ -159,8 +170,7 @@ class Evolution:
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
 
-    def evaluate_path_using_alignments(self,evolutionary_path,file_path):
-        self.process_alignment_data(file_path) # process alignment data
+    def evaluate_path_using_alignments(self,evolutionary_path):
         data_length = len(self.np_alignments_seq_records)
 
         for seq_id in evolutionary_path:
