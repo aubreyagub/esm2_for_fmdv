@@ -5,7 +5,7 @@ class ProteinSequence:
     def __init__(self,id,sequence,parent_seqs=None,mutation=None):
         self.id = id
         # directed acyclic graph to represent evolutionary paths
-        self.parent_seqs = set(parent_seqs) if parent_seqs else set()
+        self.parent_seqs = [parent_seqs] if parent_seqs else [] # list ot keep track of order added
         self.child_seqs = set()
         # esm data
         self.model = ModelSingleton().get_model()
@@ -27,7 +27,8 @@ class ProteinSequence:
         self.set_embeddings()
     
     def add_parent_seq(self,parent_seq_id):
-        self.parent_seqs.add(parent_seq_id)
+        if parent_seq_id not in self.parent_seqs:
+            self.parent_seqs.append(parent_seq_id)
         
     def add_child_seq(self,child_seq_id):
         self.child_seqs.add(child_seq_id)
