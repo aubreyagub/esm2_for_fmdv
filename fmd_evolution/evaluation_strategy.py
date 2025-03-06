@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-np.random.seed = 42 # for reproducibility
+from . import SEED, rng
 
 class EvaluationStrategy:
     def __init__(self,root_sequence,tolerance=0.1,p_tolerance=0.1,f_tolerance=0.5):
@@ -72,6 +72,26 @@ class EvaluationStrategy:
         #print(f"mutation_score: {mutation_score}")
         return mutation_score
     
+    # def set_ranked_mutation_scores(self,mutated_seq_nodes,parent_sequence):
+    #     seq_p_list = []
+    #     cosine_sim_list = []
+
+    #     for sequence in mutated_seq_nodes:
+    #         sequence_p = round(self.get_sequence_likelihood(sequence),5)
+    #         seq_p_list.append(sequence_p)
+    #         cosine_sim = round(self.get_embedding_distance(sequence,parent_sequence),5)
+    #         cosine_sim_list.append(cosine_sim)
+
+    #     mutated_seqs_sorted_by_p = sorted(mutated_seq_nodes,  key=lambda item: seq_p_list)
+    #     mutated_seqs_sorted_by_cs = sorted(mutated_seq_nodes,  key=lambda item: cosine_sim_list)
+
+    #     mutation_scores = [(mutated_seqs_sorted_by_p.index(seq)+mutated_seqs_sorted_by_cs.index(seq))/2 for seq in mutated_seq_nodes] # weighted average of the ranks
+
+    #     for sequence,score in zip(mutated_seq_nodes,mutation_scores):
+    #         sequence.set_mutation_score(score)
+            
+    #     return 
+
     # def should_accept_mutated_sequence(self,sequence,parent_sequence):
     #     sequence_p,sequence_f_score = self.get_sequence_scores(sequence,parent_sequence)
     #     is_functional = self.is_sequence_functional(sequence_p)
@@ -91,9 +111,10 @@ class EvaluationStrategy:
         parent_sequence_mutation_score = parent_sequence.mutation_score
         if sequence_mutation_score>=parent_sequence_mutation_score: 
             return True # guaranteed mutation if beneficial change
-        else:
-            random_chance_for_worse_mutation = np.random.rand()
-            return random_chance_for_worse_mutation < self.tolerance
+        return False
+        # else:
+        #     random_chance_for_worse_mutation = rng.rand()
+        #     return random_chance_for_worse_mutation < self.tolerance
         
         
     # other ascpects to evaluate: increase protein fitness + antigenic pressure if applicable + env via past data

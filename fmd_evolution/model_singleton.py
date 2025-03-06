@@ -3,6 +3,7 @@ class ModelSingleton:
         if not hasattr(cls, 'instance'):
             cls.instance = super(ModelSingleton, cls).__new__(cls)
             cls.instance.model = model
+            cls.instance.model.eval() 
             cls.instance.alphabet = alphabet
             cls.instance.batch_converter = batch_converter
         return cls.instance

@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from protein_sequence import ProteinSequence
-from model_singleton import ModelSingleton
+from .protein_sequence import ProteinSequence
+from .model_singleton import ModelSingleton
 import numpy as np
 import torch
-np.random.seed = 42 # for reproducibility
+from . import SEED,rng
 
 class MutationStrategy(ABC):
     @abstractmethod
@@ -149,11 +149,13 @@ class MetropolisHastings(MutationStrategy):
         return  relevant_probs 
         
     def sample_an_amino_acid(self,probability_distro):
-        relative_aa_index = np.random.choice(len(probability_distro),p=probability_distro)
+        relative_aa_index = rng.choice(len(probability_distro),p=probability_distro)
+        print(f"sample amino acid relative_aa_index: {relative_aa_index}")
         return relative_aa_index # relative since absolute index is calculated at index to char conversion
 
     def sample_a_position(self,probability_distro):
-        relative_pos = np.random.choice(len(probability_distro),p=probability_distro)
+        relative_pos = rng.choice(len(probability_distro),p=probability_distro)
+        print(f"sample position relative_pos: {relative_pos}")
         return self.start_pos+relative_pos # absolute position
     
     def calculate_acceptance_ratio(self,current_val,new_val,probability_distro):
@@ -163,7 +165,8 @@ class MetropolisHastings(MutationStrategy):
         return acceptance_ratio
 
     def should_accept(self,acceptance_ratio):
-        random_number = np.random.uniform(0,1)
+        random_number = rng.uniform(0,1)
+        print(f"should accept random_number: {random_number}")
         if random_number<=acceptance_ratio:
             return True 
         else:
@@ -209,5 +212,5 @@ class MetropolisHastings(MutationStrategy):
             validated_mutations = self.validate_potential_mutations(sequence,mh_absolute_pos,mh_potential_aa_positions)
             mutations.extend(validated_mutations)
 
-        mutations = list(set(mutations)) # remove duplicates
+        mutations = list(dict.fromkeys(mutations)) # remove duplicates while maintaining order
         return mutations

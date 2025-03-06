@@ -1,5 +1,5 @@
 import torch
-from model_singleton import ModelSingleton
+from .model_singleton import ModelSingleton
 
 class ProteinSequence:
     def __init__(self,id,sequence,parent_seqs=None,mutation=None):

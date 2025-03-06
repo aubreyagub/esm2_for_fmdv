@@ -1,12 +1,12 @@
-from protein_sequence import ProteinSequence
-from mutation_strategy import MutationStrategy, MinLogitPosSub
-from evaluation_strategy import EvaluationStrategy
-from model_singleton import ModelSingleton
+import copy
+from .protein_sequence import ProteinSequence
+from .mutation_strategy import MutationStrategy, MinLogitPosSub
+from .evaluation_strategy import EvaluationStrategy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 from Bio import SeqIO
-np.random.seed = 42 # for reproducibility
+from . import SEED
 
 class Evolution:
     def __init__(self,root_sequence,mutation_strategy,evaluation_strategy,max_generations): #evaluation_strategy
@@ -16,10 +16,6 @@ class Evolution:
         self.max_generations = max_generations
         self.G = nx.DiGraph()
         self.G.add_node(root_sequence.id,object=root_sequence)
-        # esm data
-        self.model = ModelSingleton().get_model()
-        self.alphabet = ModelSingleton().get_alphabet()
-        self.batch_converter = ModelSingleton().get_batch_converter()
         # evaluation data
         self.np_alignments_seq_records = None
 
@@ -34,6 +30,7 @@ class Evolution:
             if len(potential_mutations)==0: 
                 print("No potential mutations found.")
                 return
+            print(f"Pool of potential mutations: {potential_mutations}")
 
             for current_aa_char,pos,new_aa_char in potential_mutations:
                 mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
@@ -43,7 +40,7 @@ class Evolution:
                 if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
                     continue # disallow  reverse mutations
                 
-                mutation_score = self.evaluation_strategy.get_mutation_score(mutated_seq,current_seq)
+                mutation_score = self.evaluation_strategy.get_mutation_score(mutated_seq,current_seq) # do not do this in isolation, keep track of all scores for the pool and rank them, then comapre to parents rank
                 is_mutation_viable = self.evaluation_strategy.is_mutation_viable(current_seq,mutation_score)
                 if is_mutation_viable: # based on seq probability and similarity
                     mutated_seq.set_mutation_score(mutation_score)
@@ -65,6 +62,63 @@ class Evolution:
         else:
             print("Max generations reached for this path.")     
         return # stop evolving since max generations reached
+    
+    # def evolve_sequence_with_ranking(self,current_seq=None,generation=0):
+    #     if current_seq is None:
+    #         current_seq = self.root_sequence
+    #         current_seq.mutation_score = 0 # root seq is unmutated therefore has min worse score
+
+    #     if generation<self.max_generations: 
+    #         # process potential mutations
+    #         potential_mutations = self.mutation_strategy.get_next_mutations(current_seq) 
+    #         if len(potential_mutations)==0: 
+    #             print("No potential mutations found.")
+    #             return
+
+    #         mutated_seq_nodes = []
+            
+    #         for current_aa_char,pos,new_aa_char in potential_mutations:
+    #             mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
+    #             mutation = f"{current_aa_char}{str(int(pos)+1)}{new_aa_char}" # adjust pos displayed for 1-indexing
+    #             mutated_seq = self.get_or_create_seq_node(id=mutation,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
+                
+    #             if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
+    #                 continue # disallow  reverse mutations
+    #             else:
+    #                 mutated_seq_nodes.append(mutated_seq)
+            
+    #         # remove potential mutations that will creates a cycle
+    #         mutated_seq_nodes_copy = copy.deepcopy(mutated_seq_nodes)
+    #         for mutated_seq in mutated_seq_nodes_copy: # make a copy insterad   
+    #             G_copy = copy.deepcopy(self.G)
+    #             G_copy.add_node(mutated_seq.id,object=mutated_seq)
+    #             G_copy.add_edge(current_seq.id,mutated_seq.id) 
+    #             if nx.is_directed_acyclic_graph(self.G_copy): # check if the addition of the edge created a cycle
+    #                 mutated_seq_nodes.remove(mutated_seq) 
+                
+    #         self.evaluation_strategy.set_ranked_mutation_scores(mutated_seq_nodes,parent_sequence=current_seq) 
+
+    #         for mutated_seq in mutated_seq_nodes:
+    #             mutation_score = mutated_seq.mutation_score
+    #             is_mutation_viable = self.evaluation_strategy.is_mutation_viable(current_seq,mutation_score)
+    #             if is_mutation_viable: # based on seq probability and similarity
+    #                 mutated_seq.set_mutation_score(mutation_score)
+    #                 mutated_seq.add_parent_seq(current_seq.id)
+    #                 current_seq.add_child_seq(mutated_seq.id)
+    #                 self.G.add_node(mutated_seq.id,object=mutated_seq)
+    #                 self.G.add_edge(current_seq.id,mutated_seq.id,weight=mutation_score) 
+                            
+    #                 self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+
+    #             # else: # prune branch with non-viable mutation
+    #             #     if current_seq.id in self.G.nodes: 
+    #             #         self.prune_branch(current_seq.id)
+    #             #         print(f"Pruned branch leading to mutation {mutation}")
+    #             #     continue
+
+    #     else:
+    #         print("Max generations reached for this path.")     
+    #     return # stop evolving since max generations reached
 
     def get_or_create_seq_node(self,id,mutated_sequence,parent_seq,mutation):
         # mutation resulted in a new sequence 
@@ -170,34 +224,31 @@ class Evolution:
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
 
-    def evaluate_path_using_alignments(self,evolutionary_path):
-        data_length = len(self.np_alignments_seq_records)
+    def plot_path_mutation_matches(self,percentage_of_mutation_matches):
+        # a bar plot with error bars 
 
-        for seq_id in evolutionary_path:
-            seq = self.G.nodes[seq_id]["object"]
-            self.evaluate_mutation_only_using_alignments(seq_id,data_length)
-            self.evaluate_full_segment_using_alignments(seq_id,seq,data_length)
         return
 
-    def evaluate_full_segment_using_alignments(self,seq_id,seq,alignment_data_length):
-        np_predicted_constrained_seq = np.array(seq.constrained_seq)
-        num_of_matches = np.sum(np_predicted_constrained_seq==self.np_alignments_seq_records)
-        percentage_of_matches = round((num_of_matches/alignment_data_length)*100,3)
-        print(f"% of full segment matches for {seq_id}: {percentage_of_matches}")
-        return percentage_of_matches
-
+    def evaluate_path_using_alignments(self,evolutionary_path):
+        data_length = len(self.np_alignments_seq_records)
+        mutation_matches_list = []
+        for seq_id in evolutionary_path:
+            if seq_id==self.root_sequence.id:
+                continue # root seq is unmutated so no mutation to evaluate
+            percentage_of_mutation_matches = self.evaluate_mutation_only_using_alignments(seq_id,data_length)
+            mutation_matches_list.append(percentage_of_mutation_matches)
+        return mutation_matches_list
+    
+    # position-specific identity calculator
     def evaluate_mutation_only_using_alignments(self,seq_id,data_length):
-        if seq_id==self.root_sequence.id:
-            print(f"Percentage of mutation matches for {seq_id}: n/a (root sequence)")
-            return # root seq is unmutated so no mutation to evaluate
         mutated_pos = int(seq_id[1:-1])-1 # adjust pos to 0-indexing
         new_aa = seq_id[-1] 
         # check percentage of matches for the mutated position containing the new amino acid
         relative_mutated_pos = mutated_pos - self.mutation_strategy.start_pos # start pos is already 0-indexed so add 1
         alignment_amino_acids = np.array([seq_record[relative_mutated_pos] for seq_record in self.np_alignments_seq_records])
         num_of_matches = np.sum(alignment_amino_acids==new_aa)
-        percentage_of_matches = round((num_of_matches/data_length)*100,3)
-        print(f"% of mutation matches for {seq_id}: {percentage_of_matches}")
+        percentage_of_matches = round((num_of_matches/data_length)*100,2)
+        print(f"% of mutation matches for {seq_id}: {percentage_of_matches}%")
         return percentage_of_matches
 
     def process_alignment_data(self,file_path):
