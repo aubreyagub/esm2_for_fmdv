@@ -150,12 +150,10 @@ class MetropolisHastings(MutationStrategy):
         
     def sample_an_amino_acid(self,probability_distro):
         relative_aa_index = rng.choice(len(probability_distro),p=probability_distro)
-        print(f"sample amino acid relative_aa_index: {relative_aa_index}")
         return relative_aa_index # relative since absolute index is calculated at index to char conversion
 
     def sample_a_position(self,probability_distro):
         relative_pos = rng.choice(len(probability_distro),p=probability_distro)
-        print(f"sample position relative_pos: {relative_pos}")
         return self.start_pos+relative_pos # absolute position
     
     def calculate_acceptance_ratio(self,current_val,new_val,probability_distro):
@@ -166,7 +164,6 @@ class MetropolisHastings(MutationStrategy):
 
     def should_accept(self,acceptance_ratio):
         random_number = rng.uniform(0,1)
-        print(f"should accept random_number: {random_number}")
         if random_number<=acceptance_ratio:
             return True 
         else:
