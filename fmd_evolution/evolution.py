@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 from Bio import SeqIO
+from . import SEED
 
 class Evolution:
     def __init__(self,root_sequence,mutation_strategy,evaluation_strategy,ranked_evaluation_strategy,max_generations): #evaluation_strategy
@@ -152,10 +153,6 @@ class Evolution:
         return
     
     def get_best_paths_in_order(self):
-        if not nx.is_directed_acyclic_graph(self.G):
-            print("Topological sorting cannot be applied as graph is not a directed acyclic graph.")
-            return None
-        
         path_mean_mutation_scores = []
         leaf_nodes = [node for node in self.G.nodes if self.G.out_degree(node)==0] # use to filter out paths to intermediate nodes
         for leaf in leaf_nodes:
@@ -164,7 +161,7 @@ class Evolution:
             mean_mutation_score = sum(path_mutation_scores)/len(path_mutation_scores)
             path_mean_mutation_scores.append((mean_mutation_score,path))
 
-        best_paths_in_order = sorted(path_mean_mutation_scores, key=lambda x:x[0], reverse=True) # maximise score
+        best_paths_in_order = sorted(path_mean_mutation_scores, key=lambda x:x[0]) 
         return best_paths_in_order
 
 
@@ -180,14 +177,11 @@ class Evolution:
         sorted_paths = sorted(paths.items(), key=lambda item: distances[item[0]])
         return sorted_paths
     
-    def visualise_graph(self,path=None,seed=0):
+    def visualise_graph(self,path=None):
         if path is None:
             graph = self.G # visualise the entire graph
-        graph = self.G.subgraph(path) 
-        graph_is_a_dag = nx.is_directed_acyclic_graph(graph)
-
-        if not graph_is_a_dag:
-            return "Evolution graph is not a directed acyclic graph therefore topological sorting cannot be applied"
+        else:
+            graph = self.G.subgraph(path) 
 
         # # compute node size
         # in_degrees = dict(graph.in_degree())
@@ -212,9 +206,9 @@ class Evolution:
         node_colors = ['red' if node == self.root_node_id else 'lightblue' for node in graph.nodes()]
 
         plt.figure(figsize=(12,7))
-        # pos =  nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot",seed=seed) 
-        pos = nx.spring_layout(graph,k=3,seed=seed) 
-        # pos = nx.kamada_kawai_layout(graph,seed=seed)  
+        # pos = nx.spring_layout(graph,k=3,seed=SEED) 
+        # pos = nx.multipartite_layout(graph)
+        pos = nx.kamada_kawai_layout(graph,weight="weight",scale=2)  
         nx.draw(graph, pos, node_color=node_colors, with_labels=True) #node_size=[node_sizes[n] for n in graph.nodes()]
 
         labels = nx.get_node_attributes(graph,"label")
@@ -252,7 +246,6 @@ class Evolution:
         alignment_amino_acids = np.array([seq_record[relative_mutated_pos] for seq_record in self.np_alignments_seq_records])
         num_of_matches = np.sum(alignment_amino_acids==new_aa)
         percentage_of_matches = round((num_of_matches/data_length)*100,2)
-        print(f"% of mutation matches for {seq_id}: {percentage_of_matches}%")
         return percentage_of_matches
 
     def process_alignment_data(self,file_path):
