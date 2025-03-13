@@ -21,3 +21,4 @@ from .evolution import Evolution
 from .evaluation_strategy import EvaluationStrategy
 from .ranked_evaluation_strategy import RankedEvaluationStrategy
 from .model_singleton import ModelSingleton
+from .evaluation import Evaluation
