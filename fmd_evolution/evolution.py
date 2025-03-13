@@ -5,7 +5,6 @@ from .evaluation_strategy import EvaluationStrategy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from Bio import SeqIO
 from . import SEED
 
 class Evolution:
@@ -20,7 +19,6 @@ class Evolution:
         self.root_node_id = root_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
         self.G.add_node(self.root_node_id,object=root_sequence)
         # evaluation data
-        self.np_alignments_seq_records = None
 
     def evolve_sequence(self,current_seq=None,generation=0):
         if current_seq is None:
@@ -75,7 +73,7 @@ class Evolution:
     def evolve_sequence_with_ranking(self,current_seq=None,generation=0):
         if current_seq is None:
             current_seq = self.root_sequence
-            current_seq.mutation_score = 0 # root seq is unmutated therefore has min worse score
+            current_seq.mutation_score = 1000 # root seq is unmutated therefore has min worse score
 
         if generation<self.max_generations: 
             # process potential mutations
@@ -103,6 +101,7 @@ class Evolution:
             self.ranked_evaluation_strategy.set_ranked_mutation_scores(valid_potential_mutations, mutation_scores) 
 
             viable_mutations = self.ranked_evaluation_strategy.get_viable_mutations(valid_potential_mutations,parent_sequence=current_seq)
+            print(f"Viable mutations: {viable_mutations}")
 
             if len(viable_mutations)==0: 
                 print("No valid potential mutations found.")
@@ -119,8 +118,9 @@ class Evolution:
                 mutated_node_id = mutated_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
                 self.G.add_node(mutated_node_id,object=mutated_seq)
                 self.G.add_edge(current_node_id,mutated_node_id,weight=mutation_score) 
-                        
-                self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+                
+            for mutated_seq in viable_mutations:
+                self.evolve_sequence_with_ranking(current_seq=mutated_seq,generation=generation+1)
 
         else:
             print("Max generations reached for this path.")     
@@ -158,6 +158,7 @@ class Evolution:
         for leaf in leaf_nodes:
             path = nx.shortest_path(self.G,source=self.root_node_id,target=leaf,weight="weight")
             path_mutation_scores = [self.G.nodes[seq_id]["object"].mutation_score for seq_id in path]
+            print(f"Mutation scores for path {path}: {path_mutation_scores}")
             mean_mutation_score = sum(path_mutation_scores)/len(path_mutation_scores)
             path_mean_mutation_scores.append((mean_mutation_score,path))
 
@@ -220,35 +221,3 @@ class Evolution:
         plt.title("Evolutionary DAG of FMDVP1")
         plt.show()
 
-    def plot_path_mutation_matches(self,percentage_of_mutation_matches):
-        # a bar plot with error bars 
-
-        return
-
-    def evaluate_path_using_alignments(self,evolutionary_path):
-        data_length = len(self.np_alignments_seq_records)
-        mutation_matches_list = []
-        for seq_id in evolutionary_path:
-            if seq_id==self.root_node_id:
-                continue # root seq is unmutated so no mutation to evaluate
-            mutated_seq_node = self.G.nodes[seq_id]["object"]
-            mutated_seq_id = mutated_seq_node.id
-            percentage_of_mutation_matches = self.evaluate_mutation_only_using_alignments(mutated_seq_id,data_length)
-            mutation_matches_list.append(percentage_of_mutation_matches)
-        return mutation_matches_list
-    
-    # position-specific identity calculator
-    def evaluate_mutation_only_using_alignments(self,seq_id,data_length):
-        mutated_pos = int(seq_id[1:-1])-1 # adjust pos to 0-indexing
-        new_aa = seq_id[-1] 
-        # check percentage of matches for the mutated position containing the new amino acid
-        relative_mutated_pos = mutated_pos - self.mutation_strategy.start_pos # start pos is already 0-indexed so add 1
-        alignment_amino_acids = np.array([seq_record[relative_mutated_pos] for seq_record in self.np_alignments_seq_records])
-        num_of_matches = np.sum(alignment_amino_acids==new_aa)
-        percentage_of_matches = round((num_of_matches/data_length)*100,2)
-        return percentage_of_matches
-
-    def process_alignment_data(self,file_path):
-        seq_records = list(SeqIO.parse(file_path, "fasta"))
-        self.np_alignments_seq_records = np.array([str(record.seq) for record in seq_records])
-        return self.np_alignments_seq_records
