@@ -2,67 +2,36 @@ import torch
 from .model_singleton import ModelSingleton
 
 class ProteinSequence:
-    def __init__(self,id,sequence,parent_seqs=None,mutation=None):
+    def __init__(self,id="unknown",sequence="",parent_seq=None,parent_obj=None,child_seqs=[],constrained_seq=None,mutation=None,mutation_score=None,
+                 batch_tokens=None,all_aa_probabilities=None,sequence_aa_probabilities=None,embeddings=None):
         self.id = id
-        # directed acyclic graph to represent evolutionary paths
-        self.parent_seqs = [parent_seqs] if parent_seqs else [] # list ot keep track of order added
-        self.child_seqs = set()
-        # esm data
-        self.model = ModelSingleton().get_model()
-        self.alphabet = ModelSingleton().get_alphabet()
-        self.batch_converter = ModelSingleton().get_batch_converter()
-        # sequence data
-        self.sequence = sequence
+        self.parent_seq = parent_seq 
+        self.parent_obj = parent_obj
+        self.child_seqs = child_seqs
+        self.sequence = sequence # full amino acid sequence
         self.constrained_seq = None # to be set in MutationStrategy
         self.mutation = mutation # to be set using a MutationStrategy 
         self.mutation_score = None # to be set using an EvaluationStrategy
         # plm processed data
-        self.batch_tokens = None
-        self.set_batch_tokens()
-        self.all_aa_logits = None
-        self.set_all_aa_logits()
-        self.sequence_aa_logits = None
-        self.set_sequence_logits()
-        self.embeddings = None
-        self.set_embeddings()
+        self.batch_tokens = batch_tokens
+        self.all_aa_probabilities = all_aa_probabilities
+        self.sequence_aa_probabilities = sequence_aa_probabilities
+        self.embeddings = embeddings
     
-    def add_parent_seq(self,parent_seq_id):
-        if parent_seq_id not in self.parent_seqs:
-            self.parent_seqs.append(parent_seq_id)
+    def set_parent_seq(self,parent_seq_id):
+        self.parent_seq = parent_seq_id
+
+    def set_parent_obj(self,parent_obj):
+        self.parent_obj = parent_obj
         
     def add_child_seq(self,child_seq_id):
-        self.child_seqs.add(child_seq_id)
+        self.child_seqs.append(child_seq_id)
 
     def set_mutation(self,mutation): # chosen and set by a MutationStrategy
         self.mutation = mutation
     
     def set_mutation_score(self,score): # chosen and set by an EvaluationStrategy
         self.mutation_score = score
-
-    def set_batch_tokens(self):
-        data = [(self.id,self.sequence)]
-        _, _, batch_tokens = self.batch_converter(data)
-        self.batch_tokens = batch_tokens
-
-    def set_all_aa_logits(self):
-        with torch.no_grad():
-            logits_raw = self.model(self.batch_tokens)["logits"].squeeze(0)
-            aa_tokens_len = len(self.batch_tokens[0,1:-1]) # exclude start and stop tokens
-            logits_target = logits_raw [1:(aa_tokens_len+1),4:24]
-        # normalise logits to convert to probabilities 
-        softmax = torch.nn.Softmax(dim=1)
-        self.all_aa_logits = softmax(logits_target)
-
-    def set_sequence_logits(self):
-        token_offset = 4 # index of amino acids in alphabet begins at 4
-        aa_tokens = self.batch_tokens[0,1:-1]  # exclude start and stop tokens
-        sequence_aa_logits = self.all_aa_logits[torch.arange(self.all_aa_logits.size(0)),aa_tokens - token_offset]
-        self.sequence_aa_logits = sequence_aa_logits
-    
-    def set_embeddings(self):
-        with torch.no_grad():
-            results = self.model(self.batch_tokens, repr_layers=[33], return_contacts=True)
-        self.embeddings = results["representations"][33][0]
 
     def generate_mutated_sequence(self,pos,aa_char):
         list_seq = list(self.sequence)
