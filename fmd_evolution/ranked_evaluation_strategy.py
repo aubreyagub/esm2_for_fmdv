@@ -11,8 +11,8 @@ class RankedEvaluationStrategy:
         self.num_of_mutations_desired = num_of_mutations_desired
         
     def get_sequence_probability(self,sequence):
-        sequence_aa_logits = sequence.sequence_aa_logits
-        log_p = torch.log(sequence_aa_logits)
+        sequence_aa_probabilities = sequence.sequence_aa_probabilities
+        log_p = torch.log(sequence_aa_probabilities)
         mean_log_p = torch.mean(log_p)
         sequence_p = torch.exp(mean_log_p)
         return sequence_p.item()
