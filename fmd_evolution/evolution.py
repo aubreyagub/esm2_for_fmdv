@@ -1,17 +1,17 @@
 import copy
+from .protein_language_model import ProteinLanguageModel
 from .protein_sequence import ProteinSequence
 from .mutation_strategy import MutationStrategy, MinLogitPosSub
-from .evaluation_strategy import EvaluationStrategy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 from . import SEED
 
 class Evolution:
-    def __init__(self,root_sequence,mutation_strategy,evaluation_strategy,ranked_evaluation_strategy,max_generations): #evaluation_strategy
+    def __init__(self,root_sequence,mutation_strategy,ranked_evaluation_strategy,max_generations): 
+        self.plm = ProteinLanguageModel() # factory to create ProteinSequence objects
         self.root_sequence = root_sequence
         self.mutation_strategy = mutation_strategy
-        self.evaluation_strategy = evaluation_strategy
         self.ranked_evaluation_strategy = ranked_evaluation_strategy
         self.max_generations = max_generations
         self.G = nx.DiGraph()
@@ -20,55 +20,55 @@ class Evolution:
         self.G.add_node(self.root_node_id,object=root_sequence)
         # evaluation data
 
-    def evolve_sequence(self,current_seq=None,generation=0):
-        if current_seq is None:
-            current_seq = self.root_sequence
-            current_seq.mutation_score = 0 # root seq is unmutated therefore has min worse score
+    # def evolve_sequence(self,current_seq=None,generation=0):
+    #     if current_seq is None:
+    #         current_seq = self.root_sequence
+    #         current_seq.mutation_score = 0 # root seq is unmutated therefore has min worse score
 
-        if generation<self.max_generations: 
-            # process potential mutations
-            potential_mutations = self.mutation_strategy.get_next_mutations(current_seq) 
-            if len(potential_mutations)==0: 
-                print("No potential mutations found.")
-                return
-            print(f"Pool of potential mutations: {potential_mutations}")
+    #     if generation<self.max_generations: 
+    #         # process potential mutations
+    #         potential_mutations = self.mutation_strategy.get_next_mutations(current_seq) 
+    #         if len(potential_mutations)==0: 
+    #             print("No potential mutations found.")
+    #             return
+    #         print(f"Pool of potential mutations: {potential_mutations}")
 
-            for current_aa_char,pos,new_aa_char in potential_mutations:
-                mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
-                mutation = f"{current_aa_char}{str(int(pos)+1)}{new_aa_char}" # adjust pos displayed for 1-indexing
-                mutated_seq = self.create_seq_node(mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
+    #         for current_aa_char,pos,new_aa_char in potential_mutations:
+    #             mutated_sequence = current_seq.generate_mutated_sequence(pos,new_aa_char) 
+    #             mutation = f"{current_aa_char}{str(int(pos)+1)}{new_aa_char}" # adjust pos displayed for 1-indexing
+    #             mutated_seq = self.create_seq_node(mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
                 
-                if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
-                    continue # disallow  reverse mutations
+    #             if mutated_seq.id == current_seq.parent_seq or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
+    #                 continue # disallow  reverse mutations
                 
-                mutation_score = self.evaluation_strategy.get_mutation_score(mutated_seq,current_seq) # do not do this in isolation, keep track of all scores for the pool and rank them, then comapre to parents rank
-                is_mutation_viable = self.evaluation_strategy.is_mutation_viable(current_seq,mutation_score)
-                if is_mutation_viable: # based on seq probability and similarity
-                    mutated_seq.set_mutation_score(mutation_score)
-                    mutated_seq.add_parent_seq(current_seq.id)
-                    current_seq.add_child_seq(mutated_seq.id)
+    #             mutation_score = self.evaluation_strategy.get_mutation_score(mutated_seq,current_seq) # do not do this in isolation, keep track of all scores for the pool and rank them, then comapre to parents rank
+    #             is_mutation_viable = self.evaluation_strategy.is_mutation_viable(current_seq,mutation_score)
+    #             if is_mutation_viable: # based on seq probability and similarity
+    #                 mutated_seq.set_mutation_score(mutation_score)
+    #                 mutated_seq.set_parent_seq(current_seq.id)
+    #                 current_seq.add_child_seq(mutated_seq.id)
                     
 
-                    current_full_sequence = current_seq.sequence
-                    current_node_id = current_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
-                    mutated_full_sequence = mutated_seq.sequence 
-                    mutated_node_id = mutated_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
-                    self.G.add_node(mutated_node_id,object=mutated_seq)
-                    self.G.add_edge(current_node_id,mutated_node_id,weight=mutation_score) 
-                    if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle
-                        self.G.remove_edge(current_seq.id,mutated_node_id)
+    #                 current_full_sequence = current_seq.sequence
+    #                 current_node_id = current_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
+    #                 mutated_full_sequence = mutated_seq.sequence 
+    #                 mutated_node_id = mutated_full_sequence[self.mutation_strategy.start_pos:self.mutation_strategy.end_pos+1]
+    #                 self.G.add_node(mutated_node_id,object=mutated_seq)
+    #                 self.G.add_edge(current_node_id,mutated_node_id,weight=mutation_score) 
+    #                 if not nx.is_directed_acyclic_graph(self.G): # check if the addition of the edge created a cycle
+    #                     self.G.remove_edge(current_seq.id,mutated_node_id)
                             
-                    self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
+    #                 self.evolve_sequence(current_seq=mutated_seq,generation=generation+1)
 
-                # else: # prune branch with non-viable mutation
-                #     if current_seq.id in self.G.nodes: 
-                #         self.prune_branch(current_seq.id)
-                #         print(f"Pruned branch leading to mutation {mutation}")
-                #     continue
+    #             # else: # prune branch with non-viable mutation
+    #             #     if current_seq.id in self.G.nodes: 
+    #             #         self.prune_branch(current_seq.id)
+    #             #         print(f"Pruned branch leading to mutation {mutation}")
+    #             #     continue
 
-        else:
-            print("Max generations reached for this path.")     
-        return # stop evolving since max generations reached
+    #     else:
+    #         print("Max generations reached for this path.")     
+    #     return # stop evolving since max generations reached
     
     def evolve_sequence_with_ranking(self,current_seq=None,generation=0):
         if current_seq is None:
@@ -89,7 +89,7 @@ class Evolution:
                 mutation = f"{current_aa_char}{str(int(pos)+1)}{new_aa_char}" # adjust pos displayed for 1-indexing
                 mutated_seq = self.create_seq_node(mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
                 
-                if mutated_seq.id in current_seq.parent_seqs or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
+                if mutated_seq.id == current_seq.parent_seq or self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
                     continue # disallow  reverse mutations
 
                 valid_potential_mutations.append(mutated_seq)
@@ -109,7 +109,8 @@ class Evolution:
             for mutated_seq in viable_mutations:
                 mutation_score = mutated_seq.mutation_score
                 mutated_seq.set_mutation_score(mutation_score)
-                mutated_seq.add_parent_seq(current_seq.id)
+                mutated_seq.set_parent_seq(current_seq.id)
+                mutated_seq.set_parent_obj(current_seq)
                 current_seq.add_child_seq(mutated_seq.id)
                 
                 current_full_sequence = current_seq.sequence
@@ -127,30 +128,13 @@ class Evolution:
         return # stop evolving since max generations reached
 
     def create_seq_node(self,mutated_sequence,parent_seq,mutation):
-        mutated_seq = ProteinSequence(id=mutation,sequence=mutated_sequence,parent_seqs={parent_seq},mutation=mutation) # create new node
+        mutated_seq = self.plm.create_protein_sequence(id=mutation,sequence=mutated_sequence,parent_seq=parent_seq,mutation=mutation) # create new node
         return mutated_seq
 
     def is_reverse_mutation(self,mutation_seq_id,parent_seq_id):
         orig_aa_char,pos,new_aa_char = mutation_seq_id[0],mutation_seq_id[1:-1],mutation_seq_id[-1]
         reverse_mutation = f"{new_aa_char}{pos}{orig_aa_char}"
         return reverse_mutation==parent_seq_id
-    
-    def prune_branch(self,seq_id):
-        if seq_id not in self.G.nodes:
-            return 
-        seq = self.G.nodes[seq_id]
-        if "object" not in seq: 
-            return  
-        if self.G.out_degree(seq_id)==0: # only prune if it is a leaf node
-            seq = self.G.nodes[seq_id]["object"]
-            parent_seqs = seq.parent_seqs
-            self.G.remove_node(seq_id)
-
-            for parent_id in parent_seqs:
-                if self.G.out_degree(parent_id)==0: 
-                    self.prune_branch(parent_id) # recursively prune ancestor nodes with no other children
-
-        return
     
     def get_best_paths_in_order(self):
         path_mean_mutation_scores = []
