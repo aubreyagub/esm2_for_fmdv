@@ -132,9 +132,10 @@ class BlosumWeightedSub(MutationStrategy):
         return mutations
 
 class MetropolisHastings(MutationStrategy):
-    def __init__(self,iterations=10,mutations_per_seq=3,start_pos=138,end_pos=143):
+    def __init__(self,iterations=10,mutations_per_seq=3,top_k_percent=5,start_pos=138,end_pos=143):
         super().__init__(mutations_per_seq,start_pos,end_pos)
         self.iterations = iterations
+        self.top_k_percent=top_k_percent
 
     def is_new_mutation(self,current_seq,absolute_pos,potential_aa_pos):
         current_aa_char = list(current_seq)[absolute_pos]
@@ -145,8 +146,7 @@ class MetropolisHastings(MutationStrategy):
         potential_aa_char = alphabet_tokens[adjusted_potential_aa_pos] # convert positions to aa chars
 
         if current_aa_char!=potential_aa_char:
-            return (current_aa_char,absolute_pos,potential_aa_char)
-        print(f"Same mutation at {absolute_pos}: {current_aa_char} → {potential_aa_char}")
+            return (current_aa_char,absolute_pos+1,potential_aa_char) # convert pos to 1-indexing
         return None
 
     def get_probability_distro(self,probabilities):
@@ -197,14 +197,13 @@ class MetropolisHastings(MutationStrategy):
 
 
     def get_mutations_and_probability_distro(self,current_seq):
-        print(f"Constrained seq = {current_seq.sequence[self.start_pos:self.end_pos+1]}")
         current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
-        parent_constrained_seq = None
+        base_seq = current_seq.reference_seq # compare to base sequence
 
         previously_mutated_positions = []
-        if current_seq.parent_obj: # check that it is not the reference sequence
+        if base_seq: # check that it is not the base sequence 
+            parent_constrained_seq = base_seq.constrained_seq
             current_constrained_seq = current_seq.constrained_seq
-            parent_constrained_seq = current_seq.parent_obj.constrained_seq
             previously_mutated_positions = self.get_previously_mutated_positions(parent_constrained_seq,current_constrained_seq)
 
         relative_aa_probabilities = current_seq.all_aa_probabilities[self.start_pos:self.end_pos+1] # get probabilities for constrained segment
@@ -215,14 +214,14 @@ class MetropolisHastings(MutationStrategy):
     
         for relative_pos, absolute_pos in enumerate(range(self.start_pos,self.end_pos+1)):
             aa_probabilities = relative_aa_probabilities[relative_pos].numpy()
-            masked_aa_probabilities = self.mask_previously_mutated_positions(aa_probabilities,absolute_pos,previously_mutated_positions)
+            #masked_aa_probabilities = self.mask_previously_mutated_positions(aa_probabilities,absolute_pos,previously_mutated_positions)
 
-            for aa_index,probability in enumerate(masked_aa_probabilities):
-                if probability!=0: # omit zero probabilities
-                    new_mutation = self.is_new_mutation(current_seq.sequence,absolute_pos,aa_index)
-                    if new_mutation: # exclude mutation if amino acid is same as current amino acid 
-                        possible_mutations.append(new_mutation)
-                        possible_mutations_probabilities.append(probability)
+            for aa_index,probability in enumerate(aa_probabilities):
+                #if probability!=0: # omit zero probabilities
+                new_mutation = self.is_new_mutation(current_seq.sequence,absolute_pos,aa_index)
+                if new_mutation: # exclude mutation if amino acid is same as current amino acid 
+                    possible_mutations.append(new_mutation)
+                    possible_mutations_probabilities.append(probability)
                  
         possible_mutations_probabilities_np = np.array(possible_mutations_probabilities)
         probability_distro = possible_mutations_probabilities_np/possible_mutations_probabilities_np.sum() # normalise to get probabilities and ensure sum to 1
@@ -234,11 +233,12 @@ class MetropolisHastings(MutationStrategy):
         if len(possible_mutations)==0 or len(probability_distro)==0: 
             return [] # no mutations found
         
-        print(f"Len possible_mutations = {len(possible_mutations)}")
-        print(f"Len probability distro = {len(probability_distro)}")
+        print(f"Number of possible_mutations = {len(possible_mutations)}")
 
         mutations_unvalidated = []
-        for _ in range(self.mutations_per_seq):
+        k_mutations_per_seq = round(self.top_k_percent * len(possible_mutations))
+        print(f"K mutations (pool size) = {k_mutations_per_seq}")
+        for _ in range(k_mutations_per_seq):
             mutation = self.get_mutation_via_mh(possible_mutations,probability_distro)
             mutations_unvalidated.append(mutation)
 

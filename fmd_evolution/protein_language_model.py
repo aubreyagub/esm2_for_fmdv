@@ -33,7 +33,7 @@ class ProteinLanguageModel:
         embeddings = results["representations"][33][0]
         return embeddings
     
-    def create_protein_sequence(self,id,sequence,parent_seq=None,mutation=None,mutation_score=None):
+    def create_protein_sequence(self,id,sequence,reference_seq=None,parent_seq=None,mutation=None,mutation_score=None):
         batch_tokens = self.get_tokens(id,sequence)
         all_aa_probabilities = self.get_all_aa_probabilities(batch_tokens)
         sequence_aa_probabilities = self.get_sequence_aa_probabilities(all_aa_probabilities,batch_tokens)
@@ -41,6 +41,7 @@ class ProteinLanguageModel:
         return ProteinSequence(
             id=id,
             sequence=sequence,
+            reference_seq=reference_seq,
             parent_seq=parent_seq,
             batch_tokens=batch_tokens,
             all_aa_probabilities=all_aa_probabilities,
