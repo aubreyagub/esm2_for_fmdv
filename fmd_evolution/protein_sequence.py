@@ -2,9 +2,10 @@ import torch
 from .model_singleton import ModelSingleton
 
 class ProteinSequence:
-    def __init__(self,id="unknown",sequence="",parent_seq=None,parent_obj=None,child_seqs=[],constrained_seq=None,mutation=None,mutation_score=None,
+    def __init__(self,id="unknown",sequence="",reference_seq=None,parent_seq=None,parent_obj=None,child_seqs=[],constrained_seq=None,mutation=None,mutation_score=None,
                  batch_tokens=None,all_aa_probabilities=None,sequence_aa_probabilities=None,embeddings=None):
         self.id = id
+        self.reference_seq = reference_seq
         self.parent_seq = parent_seq 
         self.parent_obj = parent_obj
         self.child_seqs = child_seqs
@@ -12,6 +13,8 @@ class ProteinSequence:
         self.constrained_seq = None # to be set in MutationStrategy
         self.mutation = mutation # to be set using a MutationStrategy 
         self.mutation_score = None # to be set using an EvaluationStrategy
+        self.probability = None # to be set using a RankedEvaluationStrategy
+        self.embedding_distance = None # to be set using a RankedEvaluationStrategy
         # plm processed data
         self.batch_tokens = batch_tokens
         self.all_aa_probabilities = all_aa_probabilities
@@ -35,7 +38,7 @@ class ProteinSequence:
 
     def generate_mutated_sequence(self,pos,aa_char):
         list_seq = list(self.sequence)
-        list_seq[pos] = aa_char
+        list_seq[pos-1] = aa_char # convert mutation to 0-indexing
         mutated_seq = "".join(list_seq)
         return mutated_seq
 
