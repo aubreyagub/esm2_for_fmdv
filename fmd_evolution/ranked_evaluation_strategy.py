@@ -96,7 +96,7 @@ class RankedEvaluationStrategy:
             print(f"Parent mutation: {parent_sequence.id}, probability: {parent_probability}, distance: {parent_embedding_distance}")
             print(f"Mutation: {mutation.id}, probability: {mutation_probability}, distance: {mutation_embedding_distance}")
 
-            if mutation_probability>=parent_probability or mutation_embedding_distance<=parent_embedding_distance:
+            if mutation_probability>parent_probability or mutation_embedding_distance<parent_embedding_distance:
                 viable_mutations.append(mutation)
 
         return viable_mutations
