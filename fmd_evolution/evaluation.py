@@ -118,7 +118,7 @@ class Evaluation():
 
     @staticmethod  
     def box_plot_path_consecutive_pair_matches(paths_metrics):
-        plt.figure(figsize=(10,3))
+        plt.figure(figsize=(6,3))
         plt.boxplot(paths_metrics, patch_artist = True, notch ='True')
         plt.xlabel("Path Index")
         plt.ylabel("Consecutive pair match %")
