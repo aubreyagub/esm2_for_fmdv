@@ -92,7 +92,12 @@ class Evolution:
                 mutated_seq = self.create_seq_node(reference_seq=self.root_sequence,mutated_sequence=mutated_sequence,parent_seq=current_seq,mutation=mutation)
                 
                 if self.is_reverse_mutation(mutated_seq.id,current_seq.id): 
+                    print(f"Reverse mutation detected: {mutated_seq.id} and {current_seq.id}")
                     continue # disallow  reverse mutations >> INDICATE THIS PATH HAS TERMINATED. flipflop 
+
+                if self.is_flip_flop_mutation(mutated_seq.id,current_seq):
+                    print(f"Flip-flop mutation detected: {mutated_seq.id} and {current_seq.id}")
+                    continue
 
                 valid_potential_mutations.append(mutated_seq)
             
@@ -140,6 +145,15 @@ class Evolution:
         reverse_mutation = f"{new_aa_char}{pos}{orig_aa_char}"
         return reverse_mutation==parent_seq_id
     
+    def is_flip_flop_mutation(self,mutated_seq_id,parent_seq_obj):
+        parent_parent_seq = parent_seq_obj.parent_obj
+        if parent_parent_seq is None or parent_parent_seq.id=="base": # current seq is root node
+            return False
+        parent_parent_seq_id = parent_parent_seq.id
+        if mutated_seq_id == parent_parent_seq_id:
+            return True
+        return False
+
     def get_best_paths_in_order(self):
         path_mean_mutation_scores = []
         leaf_nodes = [node for node in self.G.nodes if self.G.out_degree(node)==0] # use to filter out paths to intermediate nodes
@@ -150,8 +164,8 @@ class Evolution:
             mean_mutation_score = (sum(path_mutation_scores)-1000)/len(path_mutation_scores)
             path_mean_mutation_scores.append((mean_mutation_score,path))
 
-        best_paths_in_order = sorted(path_mean_mutation_scores, key=lambda x:x[0]) 
-        return best_paths_in_order
+        #best_paths_in_order = sorted(path_mean_mutation_scores, key=lambda x:x[0]) 
+        return path_mean_mutation_scores #best_paths_in_order
 
 
 
