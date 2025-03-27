@@ -19,7 +19,6 @@ from .protein_sequence import ProteinSequence
 from .mutation_strategy import MutationStrategy, MinLogitPosSub, BlosumWeightedSub, MetropolisHastings
 from .evolution import Evolution
 from .evaluation_strategy import EvaluationStrategy
-from .ranked_evaluation_strategy import RankedEvaluationStrategy
 from .model_singleton import ModelSingleton
 from .evaluation import Evaluation
 from .protein_language_model import ProteinLanguageModel

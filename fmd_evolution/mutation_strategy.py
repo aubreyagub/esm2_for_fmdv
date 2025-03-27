@@ -137,7 +137,7 @@ class MetropolisHastings(MutationStrategy):
         self.iterations = iterations
         self.top_k_percent=top_k_percent
 
-    def is_new_mutation(self,current_seq,absolute_pos,potential_aa_pos):
+    def get_new_mutation(self,current_seq,absolute_pos,potential_aa_pos):
         current_aa_char = list(current_seq)[absolute_pos]
 
         adjusted_potential_aa_pos = potential_aa_pos+self.token_offset # match aa positions to esm alphabet aa indices
@@ -198,19 +198,19 @@ class MetropolisHastings(MutationStrategy):
 
     def get_mutations_and_probability_distro(self,current_seq):
         current_seq.constrained_seq = current_seq.sequence[self.start_pos:self.end_pos+1] # set to constrained to segment of interest
-        base_seq = current_seq.reference_seq # compare to base sequence
+        
+        #base_seq = current_seq.reference_seq # compare to base sequence
+        # previously_mutated_positions = []
+        # if base_seq: # check that it is not the base sequence 
+        #     parent_constrained_seq = base_seq.constrained_seq
+        #     current_constrained_seq = current_seq.constrained_seq
+        #     previously_mutated_positions = self.get_previously_mutated_positions(parent_constrained_seq,current_constrained_seq)
 
-        previously_mutated_positions = []
-        if base_seq: # check that it is not the base sequence 
-            parent_constrained_seq = base_seq.constrained_seq
-            current_constrained_seq = current_seq.constrained_seq
-            previously_mutated_positions = self.get_previously_mutated_positions(parent_constrained_seq,current_constrained_seq)
+        # print(f"Previously mutated positions = {previously_mutated_positions}")
 
         relative_aa_probabilities = current_seq.all_aa_probabilities[self.start_pos:self.end_pos+1] # get probabilities for constrained segment
         possible_mutations = []
         possible_mutations_probabilities = []
-
-        print(f"Previously mutated positions = {previously_mutated_positions}")
     
         for relative_pos, absolute_pos in enumerate(range(self.start_pos,self.end_pos+1)):
             aa_probabilities = relative_aa_probabilities[relative_pos].numpy()
@@ -218,7 +218,7 @@ class MetropolisHastings(MutationStrategy):
 
             for aa_index,probability in enumerate(aa_probabilities):
                 #if probability!=0: # omit zero probabilities
-                new_mutation = self.is_new_mutation(current_seq.sequence,absolute_pos,aa_index)
+                new_mutation = self.get_new_mutation(current_seq.sequence,absolute_pos,aa_index)
                 if new_mutation: # exclude mutation if amino acid is same as current amino acid 
                     possible_mutations.append(new_mutation)
                     possible_mutations_probabilities.append(probability)
