@@ -185,20 +185,10 @@ class Evaluation():
         plt.ylabel("Mutation frequency")
         plt.title("Distribution of Mutuation Frequency Across Generated Evolutionary Paths")
 
-    @staticmethod
-    def bar_plot_path_final_segment_matches(path_metrics):
-        plt.figure(figsize=(6,3))
-        x_positions = range(len(path_metrics))
-        path_names = [f"{n+1}" for n in x_positions] # start from path 1
-        plt.bar(path_names,path_metrics)
-        plt.xlabel("Path Index")
-        plt.ylabel("Final segment frequency")
-        plt.title("Final Segment Occurence Across Generated Evolutionary Paths")
-
     @staticmethod  
     def box_plot_path_consecutive_pair_matches(paths_metrics):
         plt.figure(figsize=(6,3))
-        plt.boxplot(paths_metrics, patch_artist = True, notch ='True')
+        plt.boxplot(paths_metrics, patch_artist = True)
 
         plt.xlabel("Path Index")
         plt.ylabel("Consecutive mutation frequency")

@@ -8,6 +8,7 @@ The evolutionary system has 4 main components: an Evolution class responsible fo
 |--- README.md <br>
 |--- Manual.md <br>
 |--- requirements.txt <br>
+|--- fmdv-evolution-with-evaluation.ipynb <br>
 |--- fmdv-evolution.ipynb <br>
 |--- /fmd_evolution <br>
 |---|--- __init__.py <br>
@@ -21,8 +22,6 @@ The evolutionary system has 4 main components: an Evolution class responsible fo
 |---|---|--- FMDV_VP1_HVR_1571seq_aln.fas <br>
 |--- /images <br>
 |---|--- (screenshot pngs) <br>
-|--- /research <br>
-|---|--- (ipynb notebooks) <br>
 
 ## Build instructions
 ### Requirements
@@ -37,7 +36,7 @@ The evolutionary system has 4 main components: an Evolution class responsible fo
 - Tested on Windows 10 and Linux - Ubuntu 
 
 ### Build Steps
-Option 1: Linux Environment Setup 
+Option 1: Linux/Windows Environment Setup 
 1. Create a python conda environment and activate it
     - conda create --name fmd_evolution_env python==3.12
     - conda activate fmd_evolution_env
@@ -50,9 +49,7 @@ Option 1: Linux Environment Setup
 4. Add the conda env created as a Jupyter kernel
     - python -m ipykernel install --user --name fmd_evolution_env --display-name "Python fmd_evolution_env"
 
-Option 2: Windows Environment Setup 
-
-Option 3: Jupyter Notebook Setup (No Environment)
+Option 2: Jupyter Notebook Setup (No Environment)
 1. Run jupyter lab
     - jupyter-lab
 2. Use default python kernel
@@ -79,11 +76,16 @@ Using the fmd_evolution package in a jupyter notebook
         - Set up the evaluator object for Evaluation. 
         - Display each path as a graph, and each path as mutations. 
         ![Path 1 Graph and Mutations](images/image-1.png)
-    - "Evaluation of Predicted Evolutionary Paths Against MSA"
+
+Due to the nature of the MSA data used, the MSA file used for evaluation of this system cannot be distributed and published beyond the research group it belongs to. Therefore, I have included a separate notebook called fmdv-evolution-with-evaluation.ipynb which includes the cells that generated the graphs for the Evaluation section of the dissertation. Note that because the MSA file specified in the notebook is not present in the code submission, this notebook cannot be ran and can simply be statically inspected. 
+
+- "Evaluation of Predicted Evolutionary Paths Against MSA"
         - Display heatmap of amino acid frequency per position for the MSA.
         ![MSA Heatmap](images/image-2.png)
         - Display box plot of Mutation Frequency (MF) values across all generated paths.
         ![MF Across All Paths](images/image-3.png)
-        - Display box plot of Consecutive Mutation (CMC) Co-occurence values across all generated paths.
+        - Display box plot of Consecutive Mutation (CMC) Co-occurrence values across all generated paths.
         ![CMC Across All Paths](images/image-4.png)
         - Compute and print summary metrics for set of generated paths from MF and CMC values. 
+
+If you would like to see all relevant classes and methods in the package, change any of the parameter values in the notebook or change the seed set for the package, please see the Manual.md.
